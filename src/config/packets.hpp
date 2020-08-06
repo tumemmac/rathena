@@ -13,7 +13,7 @@
 	/// Do NOT edit this line! To set your client version, please do this instead:
 	/// In Windows: Add this line in your src\custom\defines_pre.hpp file: #define PACKETVER YYYYMMDD
 	/// In Linux: The same as above or run the following command: ./configure --enable-packetver=YYYYMMDD
-	#define PACKETVER 20200401
+	#define PACKETVER 20180830
 #endif
 
 #ifndef PACKETVER_RE
@@ -24,28 +24,11 @@
 	#endif
 #endif
 
-#ifndef PACKETVER_RE
-	#define PACKETVER_MAIN_NUM PACKETVER
-
-	// Undefine all sakray server definitions
-	#undef PACKETVER_RE
-	#undef PACKETVER_RE_NUM
-#else
-	// Undefine existing definition
-	#undef PACKETVER_RE
-
-	#define PACKETVER_RE PACKETVER
-	#define PACKETVER_RE_NUM PACKETVER
-
-	// Undefine all main server definitions
-	#undef PACKETVER_MAIN_NUM
-#endif
-
 #if PACKETVER >= 20110817
 	/// Comment to disable the official packet obfuscation support.
 	/// This requires PACKETVER 2011-08-17 or newer.
 	#ifndef PACKET_OBFUSCATION
-		#define PACKET_OBFUSCATION
+		//#define PACKET_OBFUSCATION
 
 		// Define these inside src/custom/defines_pre.hpp or src/custom/defines_post.hpp
 		//#define PACKET_OBFUSCATION_KEY1 <key1>

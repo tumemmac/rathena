@@ -33,12 +33,6 @@
 	#define MAX_HOTKEYS 38
 #endif
 
-#if PACKETVER_MAIN_NUM >= 20190522 || PACKETVER_RE_NUM >= 20190508 || PACKETVER_ZERO_NUM >= 20190605
-	#define MAX_HOTKEYS_DB ((MAX_HOTKEYS) * 2)
-#else
-	#define MAX_HOTKEYS_DB MAX_HOTKEYS
-#endif
-
 #define MAX_MAP_PER_SERVER 1500 /// Maximum amount of maps available on a server
 #define MAX_INVENTORY 100 ///Maximum items in player inventory
 /** Max number of characters per account. Note that changing this setting alone is not enough if the client is not hexed to support more characters as well.
@@ -60,13 +54,13 @@
 #define MAX_BANK_ZENY SINT32_MAX ///Max zeny in Bank
 #define MAX_FAME 1000000000 ///Max fame points
 #define MAX_CART 100 ///Maximum item in cart
-#define MAX_SKILL 1250 ///Maximum skill can be hold by Player, Homunculus, & Mercenary (skill list) AND skill_db limit
+#define MAX_SKILL 5046 ///Maximum skill can be hold by Player, Homunculus, & Mercenary (skill list) AND skill_db limit
 #define DEFAULT_WALK_SPEED 150 ///Default walk speed
 #define MIN_WALK_SPEED 20 ///Min walk speed
 #define MAX_WALK_SPEED 1000 ///Max walk speed
 #define MAX_STORAGE 600 ///Max number of storage slots a player can have
 #define MAX_GUILD_STORAGE 600 ///Max number of storage slots a guild
-#define MAX_PARTY 12 ///Max party member
+#define MAX_PARTY 15 ///Max party member
 #define MAX_GUILD 16+10*6	///Increased max guild members +6 per 1 extension levels [Lupus]
 #define MAX_GUILDPOSITION 20	///Increased max guild positions to accomodate for all members [Valaris] (removed) [PoW]
 #define MAX_GUILDEXPULSION 32 ///Max Guild expulsion
@@ -75,7 +69,7 @@
 #define MAX_GUILDLEVEL 50 ///Max Guild level
 #define MAX_GUARDIANS 8	///Local max per castle. If this value is increased, need to add more fields on MySQL `guild_castle` table [Skotlex]
 #define MAX_QUEST_OBJECTIVES 3 ///Max quest objectives for a quest
-#define MAX_PC_BONUS_SCRIPT 50 ///Max bonus script can be fetched from `bonus_script` table on player load [Cydh]
+#define MAX_PC_BONUS_SCRIPT 100 ///Max bonus script can be fetched from `bonus_script` table on player load [Cydh]
 #define MAX_ITEM_RDM_OPT 5	 /// Max item random option [Napster]
 #define DB_NAME_LEN 256 //max len of dbs
 #define MAX_CLAN 500
@@ -488,7 +482,7 @@ struct mmo_charstatus {
 	uint32 mother;
 	uint32 child;
 
-	uint64 base_exp,job_exp;
+	expType base_exp,job_exp;
 	int zeny;
 
 	short class_; ///< Player's JobID
@@ -524,7 +518,7 @@ struct mmo_charstatus {
 
 	struct s_friend friends[MAX_FRIENDS]; //New friend system [Skotlex]
 #ifdef HOTKEY_SAVING
-	struct hotkey hotkeys[MAX_HOTKEYS_DB];
+	struct hotkey hotkeys[MAX_HOTKEYS];
 #endif
 	bool show_equip,allow_party;
 	short rename;
@@ -542,7 +536,6 @@ struct mmo_charstatus {
 	uint32 uniqueitem_counter;
 
 	unsigned char hotkey_rowshift;
-	unsigned char hotkey_rowshift2;
 	unsigned long title_id;
 };
 
@@ -668,7 +661,7 @@ struct guild {
 	int guild_id;
 	short guild_lv, connect_member, max_member, average_lv;
 	uint64 exp;
-	uint64 next_exp;
+	unsigned int next_exp;
 	int skill_point;
 	char name[NAME_LENGTH],master[NAME_LENGTH];
 	struct guild_member member[MAX_GUILD];
@@ -680,7 +673,7 @@ struct guild {
 	struct guild_expulsion expulsion[MAX_GUILDEXPULSION];
 	struct guild_skill skill[MAX_GUILDSKILL];
 	struct Channel *channel;
-	int instance_id;
+	unsigned short instance_id;
 	time_t last_leader_change;
 
 	/* Used by char-server to save events for guilds */
@@ -971,7 +964,8 @@ enum e_job {
 enum e_sex {
 	SEX_FEMALE = 0,
 	SEX_MALE,
-	SEX_SERVER
+	SEX_SERVER,
+	SEX_ACCOUNT = 99
 };
 
 /// Item Bound Type
