@@ -115,7 +115,21 @@ static void logclif_auth_ok(struct login_session_data* sd) {
 		}
 	}
 
+// (^~_~^) Gepard Shield Start
+/*
+// (^~_~^) Gepard Shield End
 	login_log(ip, sd->userid, 100, "login ok");
+// (^~_~^) Gepard Shield Start
+*/
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Gepard Shield Start
+
+	account_gepard_update_last_unique_id(sd->account_id, session[fd]->gepard_info.unique_id);
+	login_gepard_log(fd, ip, sd->userid, 100, "login ok");
+
+// (^~_~^) Gepard Shield End
+
 	ShowStatus("Connection of the account '%s' accepted.\n", sd->userid);
 
 	WFIFOHEAD(fd,header+size*server_num);
@@ -192,12 +206,30 @@ static void logclif_auth_failed(struct login_session_data* sd, int result) {
 
 	if (login_config.log_login)
 	{
+// (^~_~^) Gepard Shield Start
+/*
+// (^~_~^) Gepard Shield End
 		if(result >= 0 && result <= 15)
 		    login_log(ip, sd->userid, result, msg_txt(result));
 		else if(result >= 99 && result <= 104)
 		    login_log(ip, sd->userid, result, msg_txt(result-83)); //-83 offset
 		else
 		    login_log(ip, sd->userid, result, msg_txt(22)); //unknow error
+// (^~_~^) Gepard Shield Start
+*/
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Gepard Shield Start
+
+		if (result >= 0 && result <= 15)
+		    login_gepard_log(fd, ip, sd->userid, result, msg_txt(result));
+		else if (result >= 99 && result <= 104)
+		    login_gepard_log(fd, ip, sd->userid, result, msg_txt(result-83)); //-83 offset
+		else
+		    login_gepard_log(fd, ip, sd->userid, result, msg_txt(22)); //unknow error
+
+// (^~_~^) Gepard Shield End
+
 	}
 
 	if( (result == 0 || result == 1) && login_config.dynamic_pass_failure_ban )
@@ -353,6 +385,15 @@ static int logclif_parse_reqauth(int fd, struct login_session_data *sd, int comm
 
 		result = login_mmo_auth(sd, false);
 
+// (^~_~^) Gepard Shield Start
+
+		if (account_gepard_check_license_version(session[fd], fd, sd->group_id))
+		{
+			return 0;
+		}
+
+// (^~_~^) Gepard Shield End
+
 		if( result == -1 )
 			logclif_auth_ok(sd);
 		else
@@ -417,7 +458,19 @@ static int logclif_parse_reqcharconnec(int fd, struct login_session_data *sd, ch
 
 		ShowInfo("Connection request of the char-server '%s' @ %u.%u.%u.%u:%u (account: '%s', ip: '%s')\n", server_name, CONVIP(server_ip), server_port, sd->userid, ip);
 		sprintf(message, "charserver - %s@%u.%u.%u.%u:%u", server_name, CONVIP(server_ip), server_port);
+// (^~_~^) Gepard Shield Start
+/*
+// (^~_~^) Gepard Shield End
 		login_log(session[fd]->client_addr, sd->userid, 100, message);
+// (^~_~^) Gepard Shield Start
+*/
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Gepard Shield Start
+
+		login_gepard_log(fd, session[fd]->client_addr, sd->userid, 100, message);
+
+// (^~_~^) Gepard Shield End
 
 		result = login_mmo_auth(sd, true);
 		if( runflag == LOGINSERVER_ST_RUNNING &&
@@ -457,20 +510,6 @@ static int logclif_parse_reqcharconnec(int fd, struct login_session_data *sd, ch
 	return 1;
 }
 
-int logclif_parse_otp_login( int fd, struct login_session_data* sd ){
-	RFIFOSKIP( fd, 68 );
-
-	WFIFOHEAD( fd, 34 );
-	WFIFOW( fd, 0 ) = 0xae3;
-	WFIFOW( fd, 2 ) = 34;
-	WFIFOL( fd, 4 ) = 0; // normal login
-	safestrncpy( WFIFOCP( fd, 8 ), "S1000", 6 );
-	safestrncpy( WFIFOCP( fd, 28 ), "token", 6 );
-	WFIFOSET( fd, 34 );
-
-	return 1;
-}
-
 /**
  * Entry point from client to log-server.
  * Function that checks incoming command, then splits it to the correct handler.
@@ -497,7 +536,20 @@ int logclif_parse(int fd) {
 		if( login_config.ipban && ipban_check(ipl) )
 		{
 			ShowStatus("Connection refused: IP isn't authorised (deny/allow, ip: %s).\n", ip);
+// (^~_~^) Gepard Shield Start
+/*
+// (^~_~^) Gepard Shield End
 			login_log(ipl, "unknown", -3, "ip banned");
+// (^~_~^) Gepard Shield Start
+*/
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Gepard Shield Start
+
+	login_gepard_log(fd, ipl, "unknown", -3, "ip banned");
+
+// (^~_~^) Gepard Shield End
+
 			WFIFOHEAD(fd,23);
 			WFIFOW(fd,0) = 0x6a;
 			WFIFOB(fd,2) = 3; // 3 = Rejected from Server
@@ -515,6 +567,25 @@ int logclif_parse(int fd) {
 	{
 		uint16 command = RFIFOW(fd,0);
 		int next=1;
+
+// (^~_~^) Gepard Shield Start
+
+		if (is_gepard_active == true)
+		{
+			bool is_processed = gepard_process_cs_packet(fd, session[fd], 0);
+
+			if (is_processed == true)
+			{
+				if (command == CS_GEPARD_INIT_ACK)
+				{
+					account_gepard_check_unique_id(fd, session[fd]);
+				}
+
+				return 0;
+			}
+		}
+
+// (^~_~^) Gepard Shield End
 
 		switch( command )
 		{
@@ -535,10 +606,6 @@ int logclif_parse(int fd) {
 			break;
 		// Sending request of the coding key
 		case 0x01db: next = logclif_parse_reqkey(fd, sd); break;
-		// OTP token login
-		case 0x0acf:
-			next = logclif_parse_otp_login( fd, sd );
-			break;
 		// Connection request of a char-server
 		case 0x2710: logclif_parse_reqcharconnec(fd,sd, ip); return 0; // processing will continue elsewhere
 		default:
