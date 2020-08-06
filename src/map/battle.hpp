@@ -678,11 +678,18 @@ struct Battle_Config
 	int bgqueue_nowarp_mapflag;
 	int homunculus_exp_gain;
 	int rental_item_novalue;
-	int ping_timer_interval;
-	int ping_time;
-	int show_skill_scale;
-	int achievement_mob_share;
-	int slave_stick_with_master;
+	int homunculus_starving_rate;
+	int homunculus_starving_delay;
+	/**
+	* Extended Vending system [Lilith]
+	**/
+	int extended_vending;
+	int show_broadcas_info;
+	int show_item_vending;
+	int ex_vending_info;
+	int ex_vending_report;
+	int item_zeny;
+	int item_cash;
 
 #include "../custom/battle_config_struct.inc"
 };

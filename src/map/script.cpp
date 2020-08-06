@@ -4371,7 +4371,7 @@ void script_attach_state(struct script_state* st){
 		sd->npc_item_flag = st->npc_item_flag; // load default.
 		sd->state.disable_atcommand_on_npc = battle_config.atcommand_disable_npc && (!pc_has_permission(sd, PC_PERM_ENABLE_COMMAND));
 #ifdef SECURE_NPCTIMEOUT
-		if( sd->npc_idle_timer == INVALID_TIMER )
+		if( sd->npc_idle_timer == INVALID_TIMER && !sd->state.ignoretimeout )
 			sd->npc_idle_timer = add_timer(gettick() + (SECURE_NPCTIMEOUT_INTERVAL*1000),npc_secure_timeout_timer,sd->bl.id,0);
 		sd->npc_idle_tick = gettick();
 #endif
@@ -6925,10 +6925,9 @@ static int script_getitem_randomoption(struct script_state *st, struct map_sessi
  * @param random_option: If the struct command has random option arguments
  * @param st: Script state (required for random options)
  * @param sd: Player data (required for random options)
- * @param rental: Whether or not to count rental items
  * @return Total count of item being searched
  */
-static int script_countitem_sub(struct item *items, struct item_data *id, int size, bool expanded, bool random_option, struct script_state *st, struct map_session_data *sd = nullptr, bool rental = false) {
+int script_countitem_sub(struct item *items, struct item_data *id, int size, bool expanded, bool random_option, struct script_state *st, struct map_session_data *sd) {
 	nullpo_retr(-1, items);
 	nullpo_retr(-1, st);
 
@@ -6938,15 +6937,11 @@ static int script_countitem_sub(struct item *items, struct item_data *id, int si
 		unsigned short nameid = id->nameid;
 
 		for (int i = 0; i < size; i++) {
-			item *itm = &items[i];
-
-			if (itm == nullptr || itm->nameid == 0 || itm->amount < 1 || (!rental && itm->expire_time > 0))
-				continue;
-			if (itm->nameid == nameid)
-				count += itm->amount;
+			if (&items[i] && items[i].nameid == nameid && items[i].expire_time == 0)
+				count += items[i].amount;
 		}
 	} else { // For expanded functions
-		item it;
+		struct item it;
 
 		memset(&it, 0, sizeof(it));
 
@@ -6972,9 +6967,9 @@ static int script_countitem_sub(struct item *items, struct item_data *id, int si
 		}
 
 		for (int i = 0; i < size; i++) {
-			item *itm = &items[i];
+			struct item *itm = &items[i];
 
-			if (itm == nullptr || itm->nameid == 0 || itm->amount < 1 || (!rental && items[i].expire_time > 0))
+			if (!itm || !itm->nameid || itm->amount < 1 || items[i].expire_time > 0)
 				continue;
 			if (itm->nameid != it.nameid || itm->identify != it.identify || itm->refine != it.refine || itm->attribute != it.attribute)
 				continue;
@@ -7080,7 +7075,7 @@ BUILDIN_FUNC(cartcountitem)
 		return SCRIPT_CMD_FAILURE;
 	}
 
-	int count = script_countitem_sub(sd->cart.u.items_cart, id, MAX_CART, (aid > 3) ? true : false, false, st);
+	int count = script_countitem_sub(sd->cart.u.items_cart, id, MAX_CART, (aid > 3) ? true : false, false, st, nullptr);
 	if (count < 0) {
 		st->state = END;
 		return SCRIPT_CMD_FAILURE;
@@ -7124,7 +7119,7 @@ BUILDIN_FUNC(storagecountitem)
 		return SCRIPT_CMD_SUCCESS;
 	}
 
-	int count = script_countitem_sub(sd->storage.u.items_storage, id, MAX_STORAGE, (aid > 3) ? true : false, false, st);
+	int count = script_countitem_sub(sd->storage.u.items_storage, id, MAX_STORAGE, (aid > 3) ? true : false, false, st, nullptr);
 	if (count < 0) {
 		st->state = END;
 		return SCRIPT_CMD_FAILURE;
@@ -7172,7 +7167,7 @@ BUILDIN_FUNC(guildstoragecountitem)
 
 	gstor->lock = true;
 
-	int count = script_countitem_sub(gstor->u.items_guild, id, MAX_GUILD_STORAGE, (aid > 3) ? true : false, false, st);
+	int count = script_countitem_sub(gstor->u.items_guild, id, MAX_GUILD_STORAGE, (aid > 3) ? true : false, false, st, nullptr);
 
 	storage_guild_storageclose(sd);
 	gstor->lock = false;
@@ -7182,53 +7177,6 @@ BUILDIN_FUNC(guildstoragecountitem)
 		return SCRIPT_CMD_FAILURE;
 	}
 
-	script_pushint(st, count);
-	return SCRIPT_CMD_SUCCESS;
-}
-
-/**
- * Returns number of rental items in inventory
- * rentalcountitem(<nameID>{,<accountID>})
- * rentalcountitem2(<nameID>,<Identified>,<Refine>,<Attribute>,<Card0>,<Card1>,<Card2>,<Card3>{,<accountID>})
- * rentalcountitem3(<item id>,<identify>,<refine>,<attribute>,<card1>,<card2>,<card3>,<card4>,<RandomIDArray>,<RandomValueArray>,<RandomParamArray>{,<accountID>})
- * rentalcountitem3("<item name>",<identify>,<refine>,<attribute>,<card1>,<card2>,<card3>,<card4>,<RandomIDArray>,<RandomValueArray>,<RandomParamArray>{,<accountID>})
- */
-BUILDIN_FUNC(rentalcountitem)
-{
-	char *command = (char *)script_getfuncname(st);
-	int aid = 3;
-	bool random_option = false;
-
-	if (command[strlen(command) - 1] == '2')
-		aid = 10;
-	else if (command[strlen(command) - 1] == '3') {
-		aid = 13;
-		random_option = true;
-	}
-
-	map_session_data *sd;
-
-	if (!script_accid2sd(aid, sd))
-		return SCRIPT_CMD_FAILURE;
-
-	item_data *id;
-
-	if (script_isstring(st, 2)) // item name
-		id = itemdb_searchname(script_getstr(st, 2));
-	else // item id
-		id = itemdb_exists(script_getnum(st, 2));
-
-	if (!id) {
-		ShowError("buildin_%s: Invalid item '%s'.\n", command, script_getstr(st, 2)); // returns string, regardless of what it was
-		script_pushint(st, 0);
-		return SCRIPT_CMD_FAILURE;
-	}
-
-	int count = script_countitem_sub(sd->inventory.u.items_inventory, id, MAX_INVENTORY, (aid > 3) ? true : false, random_option, st, sd, true);
-	if (count < 0) {
-		st->state = END;
-		return SCRIPT_CMD_FAILURE;
-	}
 	script_pushint(st, count);
 	return SCRIPT_CMD_SUCCESS;
 }
@@ -14549,6 +14497,22 @@ BUILDIN_FUNC(petskillsupport)
 	return SCRIPT_CMD_SUCCESS;
 }
 
+static inline void script_skill_effect(block_list *bl, uint16 skill_id, uint16 skill_lv, int16 x, int16 y) {
+	nullpo_retv(bl);
+
+	switch (skill_get_casttype(skill_id)) {
+		case CAST_GROUND:
+			clif_skill_poseffect(bl, skill_id, skill_lv, x, y, gettick());
+			break;
+		case CAST_NODAMAGE:
+			clif_skill_nodamage(bl, bl, skill_id, skill_lv, 1);
+			break;
+		case CAST_DAMAGE:
+			clif_skill_damage(bl, bl, gettick(), status_get_amotion(bl), status_get_dmotion(bl), 0, 1, skill_id, skill_lv, skill_get_hit(skill_id));
+			break;
+	}
+}
+
 /*==========================================
  * Scripted skill effects [Celest]
  *------------------------------------------*/
@@ -14560,10 +14524,23 @@ BUILDIN_FUNC(skilleffect)
 	uint16 skill_id, skill_lv;
 	
 	if( !script_rid2sd(sd) )
-		return SCRIPT_CMD_SUCCESS;
+		return SCRIPT_CMD_FAILURE;
 	
 	skill_id = ( script_isstring(st, 2) ? skill_name2id(script_getstr(st,2)) : script_getnum(st,2) );
 	skill_lv = script_getnum(st,3);
+	
+	if (skill_db.find(skill_id) == nullptr) {
+		ShowError("buildin_skilleffect: Invalid skill defined (%s)!\n", script_getstr(st, 2));
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	uint16 skill_lv_cap = cap_value(skill_lv, 1, skill_get_max(skill_id));
+
+	if (skill_lv != skill_lv_cap) {
+		ShowWarning("buildin_skilleffect: Invalid skill level %d, capping to %d.\n", skill_lv, skill_lv_cap);
+		skill_lv = skill_lv_cap;
+		script_reportsrc(st);
+	}
 
 	/* Ensure we're standing because the following packet causes the client to virtually set the char to stand,
 	 * which leaves the server thinking it still is sitting. */
@@ -14572,7 +14549,8 @@ BUILDIN_FUNC(skilleffect)
 		clif_standing(&sd->bl);
 	}
 
-	clif_skill_nodamage(&sd->bl,&sd->bl,skill_id,skill_lv,1);
+	script_skill_effect(&sd->bl, skill_id, skill_lv, sd->bl.x, sd->bl.y);
+	
 	return SCRIPT_CMD_SUCCESS;
 }
 
@@ -14584,16 +14562,35 @@ BUILDIN_FUNC(skilleffect)
 BUILDIN_FUNC(npcskilleffect)
 {
 	struct block_list *bl= map_id2bl(st->oid);
+	
+	if (bl == nullptr) {
+		ShowError("buildin_npcskilleffect: Invalid object attached to NPC.");
+		return SCRIPT_CMD_FAILURE;
+	}
+	
 	uint16 skill_id, skill_lv;
-	int x, y;
+	int16 x, y;
 
 	skill_id=( script_isstring(st, 2) ? skill_name2id(script_getstr(st,2)) : script_getnum(st,2) );
 	skill_lv=script_getnum(st,3);
 	x=script_getnum(st,4);
 	y=script_getnum(st,5);
 
-	if (bl)
-		clif_skill_poseffect(bl,skill_id,skill_lv,x,y,gettick());
+	if (skill_db.find(skill_id) == nullptr) {
+		ShowError("buildin_npcskilleffect: Invalid skill defined (%s)!\n", script_getstr(st, 2));
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	uint16 skill_lv_cap = cap_value(skill_lv, 1, skill_get_max(skill_id));
+
+	if (skill_lv != skill_lv_cap) {
+		ShowWarning("buildin_npcskilleffect: Invalid skill level %d, capping to %d.\n", skill_lv, skill_lv_cap);
+		skill_lv = skill_lv_cap;
+		script_reportsrc(st);
+	}
+
+	script_skill_effect(bl, skill_id, skill_lv, bl->x, bl->y);
+	
 	return SCRIPT_CMD_SUCCESS;
 }
 
@@ -24766,10 +24763,240 @@ BUILDIN_FUNC(preg_match) {
 #endif
 }
 
+// (^~_~^) Gepard Shield Start
+
+BUILDIN_FUNC(get_unique_id)
+{
+	struct map_session_data* sd;
+
+	if (!script_rid2sd(sd))
+	{
+		script_pushint(st, 0);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	script_pushint(st, session[sd->fd]->gepard_info.unique_id);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+// (^~_~^) Gepard Shield End
+
+// (^~_~^) Auras Start
+
+BUILDIN_FUNC(set_aura)
+{ // Auras by Functor
+	struct map_session_data * sd;
+	unsigned int aura_data_temp;
+
+	unsigned int aura_part_1 = script_getnum(st, 2);
+	unsigned int aura_part_2 = script_getnum(st, 3);
+	unsigned int aura_part_3 = script_getnum(st, 4);
+
+	if (!script_rid2sd(sd))
+	{
+		script_pushint(st,-1);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if (aura_part_1 > 0xFF || aura_part_2 > 0xFF || aura_part_2 > 0xFF)
+	{
+		script_pushint(st,-2);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	aura_data_temp = sd->aura_data;
+
+	sd->aura.part_1 = aura_part_1;
+	sd->aura.part_2 = aura_part_2;
+	sd->aura.part_3 = aura_part_3;
+
+	if (aura_data_temp != sd->aura_data)
+	{
+		if (sd->aura_data == 0x1000000)
+		{
+			clif_send_aura(&sd->bl, sd->aura_data, AREA);
+			sd->aura_data  = 0;
+		}
+		else
+		{
+			sd->aura.option = 1;
+			clif_send_aura(&sd->bl, sd->aura_data, AREA);
+		}
+
+		pc_setglobalreg(sd, add_str("AURA_DATA"), sd->aura_data);
+	}
+
+	script_pushint(st, 0);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+BUILDIN_FUNC(set_aura_part)
+{ // Auras by Functor
+	struct map_session_data * sd;
+	unsigned int aura_type = script_getnum(st, 2);
+	unsigned int number = script_getnum(st, 3);
+	unsigned int aura_data_temp;
+	unsigned int error = 0;
+
+	if (!script_rid2sd(sd))
+	{
+		script_pushint(st,-1);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if (number > 255)
+	{
+		script_pushint(st,-2);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	aura_data_temp = sd->aura_data;
+
+	switch (aura_type)
+	{
+		case 1: sd->aura.part_1 = number; break;
+		case 2: sd->aura.part_2 = number; break;
+		case 3:	sd->aura.part_3 = number; break;
+
+		default:
+		{
+			script_pushint(st, -4);
+			return SCRIPT_CMD_FAILURE;
+		}	
+	}
+
+	if (aura_data_temp != sd->aura_data)
+	{
+		if (sd->aura_data == 0x1000000)
+		{
+			clif_send_aura(&sd->bl, sd->aura_data, AREA);
+			sd->aura_data  = 0;
+		}
+		else
+		{
+			sd->aura.option = 1;
+			clif_send_aura(&sd->bl, sd->aura_data, AREA);
+		}
+
+		pc_setglobalreg(sd, add_str("AURA_DATA"), sd->aura_data);
+	}
+
+	script_pushint(st, error);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+BUILDIN_FUNC(get_aura_part)
+{ // Auras by Functor
+	struct map_session_data * sd;
+
+	unsigned int aura_type = script_getnum(st, 2);
+
+	unsigned int number = -2;
+
+	if (!script_rid2sd(sd))
+	{
+		script_pushint(st,-1);
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	switch (aura_type)
+	{
+		case 1: number = sd->aura.part_1; break;
+		case 2: number = sd->aura.part_2; break;
+		case 3: number = sd->aura.part_3; break;
+	}
+
+	script_pushint(st, number);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+// (^~_~^) Auras End
+
+// (^~_~^) Color Nicks Start
+
+BUILDIN_FUNC(set_color_nick)
+{
+	struct map_session_data* sd;
+	unsigned int group_id = script_getnum(st, 2);
+
+	if (!script_rid2sd(sd))
+	{
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if (group_id == 0)
+	{
+		sd->color_nicks_group_id = 0;
+	}
+	else
+	{
+		if (idb_exists(color_nicks_db, group_id) == 0)
+		{
+			script_pushint(st, -1);
+			return SCRIPT_CMD_FAILURE;
+		}
+
+		sd->color_nicks_group_id = group_id;
+	}
+
+	pc_setglobalreg(sd, add_str("CN_GROUP_ID"), sd->color_nicks_group_id);
+
+	clif_send_colornicks(sd);
+
+	script_pushint(st, 0);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+BUILDIN_FUNC(get_color_nick)
+{
+	struct map_session_data* sd;
+
+	if (!script_rid2sd(sd))
+	{
+		script_pushint(st, -1);
+
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	script_pushint(st, sd->color_nicks_group_id);
+
+	return SCRIPT_CMD_SUCCESS;
+}
+
+// (^~_~^) Color Nicks End
+
 /// script command definitions
 /// for an explanation on args, see add_buildin_func
 struct script_function buildin_func[] = {
+
+// (^~_~^) Gepard Shield Start
+
+	BUILDIN_DEF(get_unique_id,""),
+
+// (^~_~^) Gepard Shield End
+
 	// NPC interaction
+
+// (^~_~^) Auras Start
+
+	BUILDIN_DEF(set_aura,"iii"),
+	BUILDIN_DEF(set_aura_part,"ii"),
+	BUILDIN_DEF(get_aura_part,"i"),
+
+// (^~_~^) Auras End
+
+// (^~_~^) Color Nicks Start
+
+	BUILDIN_DEF(set_color_nick,"i"),
+	BUILDIN_DEF(get_color_nick,""),
+
+// (^~_~^) Color Nicks End
+
 	BUILDIN_DEF(mes,"s*"),
 	BUILDIN_DEF(next,""),
 	BUILDIN_DEF(clear,""),
@@ -25396,11 +25623,6 @@ struct script_function buildin_func[] = {
 	BUILDIN_DEF(cloakoffnpc, "s?"),
 	BUILDIN_DEF(cloakonnpc, "s?"),
 	BUILDIN_DEF(isnpccloaked, "s?"),
-
-	BUILDIN_DEF(rentalcountitem, "v?"),
-	BUILDIN_DEF2(rentalcountitem, "rentalcountitem2", "viiiiiii?"),
-	BUILDIN_DEF2(rentalcountitem, "rentalcountitem3", "viiiiiiirrr?"),
-
 #include "../custom/script_def.inc"
 
 	{NULL,NULL,NULL},

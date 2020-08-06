@@ -24,7 +24,6 @@
 #include "vending.hpp" // struct s_vending
 
 enum AtCommandType : uint8;
-enum e_instance_mode : uint8;
 //enum e_log_chat_type : uint8;
 enum e_log_pick_type : uint32;
 enum sc_type : int16;
@@ -305,6 +304,13 @@ struct map_session_data {
 		unsigned int gmaster_flag : 1;
 		unsigned int prevend : 1;//used to flag wheather you've spent 40sp to open the vending or not.
 		unsigned int warping : 1;//states whether you're in the middle of a warp processing
+
+	// (^~_~^) Auras Start
+
+	unsigned int show_auras : 2;
+
+	// (^~_~^) Auras End
+
 		unsigned int permanent_speed : 1; // When 1, speed cannot be changed through status_calc_pc().
 		bool hold_recalc;
 		unsigned int banking : 1; //1 when we using the banking system 0 when closed
@@ -526,6 +532,12 @@ struct map_session_data {
 	} bonus;
 	// zeroed vars end here.
 
+	// (^~_~^) Color Nicks Start
+
+	unsigned int color_nicks_group_id;
+
+	// (^~_~^) Color Nicks End
+
 	int castrate,delayrate,hprate,sprate,dsprate;
 	int hprecov_rate,sprecov_rate;
 	int matk_rate;
@@ -564,6 +576,23 @@ struct map_session_data {
 	bool party_joining; // whether the char is accepting party invitation
 	int party_invite, party_invite_account; // for handling party invitation (holds party id and account id)
 	int adopt_invite; // Adoption
+
+	// (^~_~^) Auras Start
+
+	union 
+	{ // Auras by Functor
+		struct
+		{
+			unsigned char part_3;
+			unsigned char part_2;
+			unsigned char part_1;
+			unsigned char option;
+		} aura;
+
+		unsigned int aura_data;
+	};
+
+	// (^~_~^) Auras End
 
 	struct guild *guild; // [Ind] speed everything up
 	int guild_invite,guild_invite_account;
@@ -764,9 +793,13 @@ struct map_session_data {
 		t_tick tick;
 	} roulette;
 
-	int instance_id;
-	e_instance_mode instance_mode; ///< Mode of instance player last leaves from (used for instance destruction button)
+	/**
+	* Extended Vending system [Lilith]
+	**/
+	unsigned short vend_loot;
+	int vend_lvl;
 
+	unsigned short instance_id;
 	short setlook_head_top, setlook_head_mid, setlook_head_bottom, setlook_robe; ///< Stores 'setlook' script command values.
 	unsigned int last_lapine_box;
 
@@ -774,13 +807,6 @@ struct map_session_data {
 	uint32* hatEffectIDs;
 	uint8 hatEffectCount;
 #endif
-
-	struct{
-		int tid;
-		uint16 skill_id;
-		uint16 level;
-		int target;
-	} skill_keep_using;
 };
 
 extern struct eri *pc_sc_display_ers; /// Player's SC display table
@@ -887,7 +913,7 @@ struct s_job_info {
 #else
 	int aspd_base[MAX_WEAPON_TYPE];	//[blackhole89]
 #endif
-	uint64 exp_table[2][MAX_LEVEL];
+	expType exp_table[2][MAX_LEVEL];
 	uint32 max_level[2];
 	struct s_params {
 		uint16 str, agi, vit, int_, dex, luk;
@@ -1194,11 +1220,11 @@ bool pc_is_maxbaselv(struct map_session_data *sd);
 bool pc_is_maxjoblv(struct map_session_data *sd);
 int pc_checkbaselevelup(struct map_session_data *sd);
 int pc_checkjoblevelup(struct map_session_data *sd);
-void pc_gainexp(struct map_session_data *sd, struct block_list *src, uint64 base_exp, uint64 job_exp, uint8 exp_flag);
-void pc_gainexp_disp(struct map_session_data *sd, uint64 base_exp, uint64 next_base_exp, uint64 job_exp, uint64 next_job_exp, bool lost);
-void pc_lostexp(struct map_session_data *sd, uint64 base_exp, uint64 job_exp);
-uint64 pc_nextbaseexp(struct map_session_data *sd);
-uint64 pc_nextjobexp(struct map_session_data *sd);
+void pc_gainexp(struct map_session_data *sd, struct block_list *src, expType base_exp, expType job_exp, uint8 exp_flag);
+void pc_gainexp_disp(struct map_session_data *sd, expType base_exp, expType next_base_exp, expType job_exp, expType next_job_exp, bool lost);
+void pc_lostexp(struct map_session_data *sd, expType base_exp, expType job_exp);
+expType pc_nextbaseexp(struct map_session_data *sd);
+expType pc_nextjobexp(struct map_session_data *sd);
 int pc_gets_status_point(int);
 int pc_need_status_point(struct map_session_data *,int,int);
 int pc_maxparameterincrease(struct map_session_data*,int);
