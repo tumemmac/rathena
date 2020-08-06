@@ -105,7 +105,6 @@ enum e_skill_inf2 : uint8 {
 	INF2_IGNOREWUGBITE, // Skill blocked by RA_WUGBITE
 	INF2_IGNOREAUTOGUARD , // Skill is not blocked by SC_AUTOGUARD (physical-skill only)
 	INF2_IGNORECICADA, // Skill is not blocked by SC_UTSUSEMI or SC_BUNSINJYUTSU (physical-skill only)
-	INF2_SHOWSCALE, // Skill shows AoE area while casting
 	INF2_MAX,
 };
 
@@ -531,7 +530,6 @@ uint16 SKILL_MAX_DB(void);
 int skill_isammotype(struct map_session_data *sd, unsigned short skill_id);
 TIMER_FUNC(skill_castend_id);
 TIMER_FUNC(skill_castend_pos);
-TIMER_FUNC( skill_keep_using );
 int skill_castend_map( struct map_session_data *sd,uint16 skill_id, const char *map);
 
 int skill_cleartimerskill(struct block_list *src);
@@ -1953,15 +1951,18 @@ enum e_skill {
 	WE_CHEERUP,
 
 	ALL_EQSWITCH = 5067,
-
 	CG_SPECIALSINGER,
+	NV_BREAKTHROUGH,
+	NV_HELPANGEL,
+	NV_TRANSCENDENCE,
 
 	AB_VITUPERATUM = 5072,
 	AB_CONVENIO,
 	ALL_LIGHTNING_STORM,
-	NV_BREAKTHROUGH,
-	NV_HELPANGEL,
-	NV_TRANSCENDENCE,
+	
+	
+	
+	WL_READING_SB_READING,
 
 	HLIF_HEAL = 8001,
 	HLIF_AVOID,
@@ -2167,7 +2168,7 @@ enum e_skill_unit_id : uint16 {
 	UNT_DEATHWAVE, //TODO
 	UNT_WATERATTACK, //TODO
 	UNT_WINDATTACK, //TODO
-	UNT_EARTHQUAKE, //TODO
+	UNT_EARTHQUAKE,
 	UNT_EVILLAND,
 	UNT_DARK_RUNNER, //TODO
 	UNT_DARK_TRANSFER, //TODO
@@ -2203,7 +2204,7 @@ enum e_skill_unit_id : uint16 {
 	UNT_DEMONIC_FIRE,
 	UNT_FIRE_EXPANSION_SMOKE_POWDER,
 	UNT_FIRE_EXPANSION_TEAR_GAS,
-	UNT_HELLS_PLANT, // No longer a unit skill
+	UNT_HELLS_PLANT,
 	UNT_VACUUM_EXTREME,
 	UNT_BANDING,
 	UNT_FIRE_MANTLE,
@@ -2258,7 +2259,7 @@ void skill_usave_trigger(struct map_session_data *sd);
 /**
  * Warlock
  **/
-enum wl_spheres {
+enum e_wl_spheres {
 	WLS_FIRE = 0x44,
 	WLS_WIND,
 	WLS_WATER,
@@ -2338,6 +2339,7 @@ void skill_combo(struct block_list* src,struct block_list *dsrc, struct block_li
 void skill_reveal_trap_inarea(struct block_list *src, int range, int x, int y);
 int skill_get_time3(struct map_data *mapdata, uint16 skill_id, uint16 skill_lv);
 
+int skill_vending(struct map_session_data *sd, unsigned short nameid); //Extended Vending [Lilith]
 /// Variable name of copied skill by Plagiarism
 #define SKILL_VAR_PLAGIARISM "CLONE_SKILL"
 /// Variable name of copied skill level by Plagiarism

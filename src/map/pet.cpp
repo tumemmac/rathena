@@ -372,6 +372,11 @@ uint64 PetDatabase::parseBodyNode( const YAML::Node &node ){
 		if( !this->asString( node, "Script", script ) ){
 			return 0;
 		}
+		
+		if( pet->pet_bonus_script != nullptr ){
+			aFree( pet->pet_bonus_script );
+			pet->pet_bonus_script = nullptr;
+		}
 
 		pet->pet_bonus_script = parse_script( script.c_str(), this->getCurrentFile().c_str(), node["Script"].Mark().line + 1, SCRIPT_IGNORE_EXTERNAL_BRACKETS );
 	}else{
@@ -385,6 +390,11 @@ uint64 PetDatabase::parseBodyNode( const YAML::Node &node ){
 
 		if( !this->asString( node, "SupportScript", script ) ){
 			return 0;
+		}
+		
+		if( pet->pet_support_script != nullptr ){
+			aFree( pet->pet_support_script );
+			pet->pet_support_script = nullptr;
 		}
 
 		pet->pet_support_script = parse_script( script.c_str(), this->getCurrentFile().c_str(), node["SupportScript"].Mark().line + 1, SCRIPT_IGNORE_EXTERNAL_BRACKETS );

@@ -83,8 +83,15 @@ int unit_walktoxy_sub(struct block_list *bl)
 	struct unit_data *ud = NULL;
 
 	nullpo_retr(1, bl);
+	
+	if(status_isdead(bl))
+		return 0;
+	
 	ud = unit_bl2ud(bl);
 	if(ud == NULL) return 0;
+	
+	if(status_isdead(bl))
+		return 0;
 
 	if( !path_search(&wpd,bl->m,bl->x,bl->y,ud->to_x,ud->to_y,ud->state.walk_easy,CELL_CHKNOPASS) )
 		return 0;
@@ -1890,7 +1897,7 @@ int unit_skilluse_id2(struct block_list *src, int target_id, uint16 skill_id, ui
 	skill_toggle_magicpower(src, skill_id);
 
 	// In official this is triggered even if no cast time.
-	clif_skillcasting(src, src->id, target_id, 0,0, skill_id, skill_lv, skill_get_ele(skill_id, skill_lv), casttime);
+	clif_skillcasting(src, src->id, target_id, 0,0, skill_id, skill_get_ele(skill_id, skill_lv), casttime);
 
 	if (sd && target->type == BL_MOB) {
 		TBL_MOB *md = (TBL_MOB*)target;
@@ -2149,7 +2156,7 @@ int unit_skilluse_pos2( struct block_list *src, short skill_x, short skill_y, ui
 	skill_toggle_magicpower(src, skill_id);
 
 	// In official this is triggered even if no cast time.
-	clif_skillcasting(src, src->id, 0, skill_x, skill_y, skill_id, skill_lv, skill_get_ele(skill_id, skill_lv), casttime);
+	clif_skillcasting(src, src->id, 0, skill_x, skill_y, skill_id, skill_get_ele(skill_id, skill_lv), casttime);
 
 	if( casttime > 0 ) {
 		ud->skilltimer = add_timer( tick+casttime, skill_castend_pos, src->id, 0 );

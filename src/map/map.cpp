@@ -100,6 +100,13 @@ char log_db_db[32] = "log";
 Sql* logmysql_handle;
 
 // DBMap declaration
+
+// (^~_~^) Color Nicks Start
+
+DBMap* color_nicks_db = NULL; // int group_id -> struct color_data*
+
+// (^~_~^) Color Nicks End
+
 static DBMap* id_db=NULL; /// int id -> struct block_list*
 static DBMap* pc_db=NULL; /// int id -> struct map_session_data*
 static DBMap* mobid_db=NULL; /// int id -> struct mob_data*
@@ -122,7 +129,7 @@ static struct block_list *bl_list[BL_LIST_MAX];
 static int bl_list_count = 0;
 
 #ifndef MAP_MAX_MSG
-	#define MAP_MAX_MSG 1550
+	#define MAP_MAX_MSG 1600
 #endif
 
 struct map_data map[MAX_MAP_PER_SERVER];
@@ -182,6 +189,47 @@ struct s_map_default map_default;
 int console = 0;
 int enable_spy = 0; //To enable/disable @spy commands, which consume too much cpu time when sending packets. [Skotlex]
 int enable_grf = 0;	//To enable/disable reading maps from GRF files, bypassing mapcache [blackhole89]
+
+// (^~_~^) Color Nicks Start
+
+static bool map_color_nicks_parse(char* split[], int columns, int current)
+{
+	struct color_data* cn_data; 
+
+	int group_id = atoi(split[0]);
+
+	if (group_id == 0)
+	{
+		return false;
+	}
+
+	CREATE(cn_data, struct color_data, 1);
+
+	cn_data->text_color = (unsigned int)strtol(split[1],NULL,0);
+	cn_data->shadow_color = (unsigned int)strtol(split[2],NULL,0);
+
+	idb_put(color_nicks_db, group_id, cn_data);
+
+	return true;
+}
+
+int map_color_nicks_clear(DBKey key, DBData* data, va_list va)
+{
+	struct color_data* cn_data = (struct color_data*)db_data2ptr(data);
+
+	db_remove(color_nicks_db,key);
+	aFree(cn_data);
+
+	return 0;
+}
+
+void map_color_nicks_load()
+{
+	color_nicks_db->foreach(color_nicks_db, map_color_nicks_clear);
+	sv_readdb(db_path, "color_nicks.txt", ',', 3, 3, USHRT_MAX, map_color_nicks_parse, true);
+}
+
+// (^~_~^) Color Nicks End
 
 /**
  * Get the map data
@@ -491,6 +539,8 @@ int map_moveblock(struct block_list *bl, int x1, int y1, t_tick tick)
 					skill_unit_move_unit_group(skill_id2group(sc->data[SC_WARM]->val4), bl->m, x1-x0, y1-y0);
 				if (sc->data[SC_BANDING])
 					skill_unit_move_unit_group(skill_id2group(sc->data[SC_BANDING]->val4), bl->m, x1-x0, y1-y0);
+				if (sc->data[SC_HELLS_PLANT])
+					skill_unit_move_unit_group(skill_id2group(sc->data[SC_HELLS_PLANT]->val4), bl->m, x1-x0, y1-y0);
 
 				if (sc->data[SC_NEUTRALBARRIER_MASTER])
 					skill_unit_move_unit_group(skill_id2group(sc->data[SC_NEUTRALBARRIER_MASTER]->val2), bl->m, x1-x0, y1-y0);
@@ -4958,6 +5008,13 @@ void do_final(void){
 	iwall_db->destroy(iwall_db, NULL);
 	regen_db->destroy(regen_db, NULL);
 
+// (^~_~^) Color Nicks Start
+
+	color_nicks_db->foreach(color_nicks_db, map_color_nicks_clear);
+	color_nicks_db->destroy(color_nicks_db, NULL);
+
+// (^~_~^) Color Nicks End
+
 	map_sql_close();
 
 	ShowStatus("Finished.\n");
@@ -5208,6 +5265,12 @@ int do_init(int argc, char *argv[])
 	regen_db = idb_alloc(DB_OPT_BASE); // efficient status_natural_heal processing
 	iwall_db = strdb_alloc(DB_OPT_RELEASE_DATA,2*NAME_LENGTH+2+1); // [Zephyrus] Invisible Walls
 
+// (^~_~^) Color Nicks Start
+
+	color_nicks_db = idb_alloc(DB_OPT_BASE);
+
+// (^~_~^) Color Nicks End
+
 	map_sql_init();
 	if (log_config.sql_logs)
 		log_sql_init();
@@ -5256,6 +5319,12 @@ int do_init(int argc, char *argv[])
 	do_init_duel();
 	do_init_vending();
 	do_init_buyingstore();
+
+// (^~_~^) Color Nicks Start
+
+	map_color_nicks_load();
+
+// (^~_~^) Color Nicks End
 
 	npc_event_do_oninit();	// Init npcs (OnInit)
 

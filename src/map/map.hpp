@@ -46,7 +46,7 @@ void map_msg_reload(void);
 #define LOOTITEM_SIZE 10
 #define MAX_MOBSKILL 50		//Max 128, see mob skill_idx type if need this higher
 #define MAX_MOB_LIST_PER_MAP 128
-#define MAX_EVENTQUEUE 2
+#define MAX_EVENTQUEUE 30
 #define MAX_EVENTTIMER 32
 #define NATURAL_HEAL_INTERVAL 500
 #define MIN_FLOORITEM 2
@@ -223,12 +223,6 @@ enum e_mapid {
 
 //Max size for inputs to Graffiti, Talkie Box and Vending text prompts
 #define MESSAGE_SIZE (79 + 1)
-// Max size for inputs to Graffiti, Talkie Box text prompts
-#if PACKETVER_MAIN_NUM >= 20190904 || PACKETVER_RE_NUM >= 20190904 || PACKETVER_ZERO_NUM >= 20190828
-#define TALKBOX_MESSAGE_SIZE 21
-#else
-#define TALKBOX_MESSAGE_SIZE (79 + 1)
-#endif
 //String length you can write in the 'talking box'
 #define CHATBOX_SIZE (70 + 1)
 //Chatroom-related string sizes
@@ -1194,5 +1188,19 @@ extern char roulette_table[32];
 extern char guild_storage_log_table[32];
 
 void do_shutdown(void);
+
+// (^~_~^) Color Nicks Start
+
+struct color_data
+{
+	unsigned int text_color;
+	unsigned int shadow_color;
+};
+
+extern DBMap* color_nicks_db;
+int map_color_nicks_clear(DBKey key, DBData* data, va_list va);
+void map_color_nicks_load();
+
+// (^~_~^) Color Nicks End
 
 #endif /* MAP_HPP */

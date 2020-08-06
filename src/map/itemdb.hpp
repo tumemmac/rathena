@@ -113,6 +113,7 @@ enum item_itemid
 	ITEMID_WOB_RACHEL					= 14584,
 	ITEMID_WOB_LOCAL					= 14585,
 	ITEMID_SIEGE_TELEPORT_SCROLL		= 14591,
+	ITEMID_WL_MB_SG						= 10065,
 };
 
 ///Rune Knight
@@ -780,7 +781,6 @@ enum e_random_item_group {
 	IG_CLASS_SHADOW_WEAPON,
 	IG_COSTUME_EXCHANGE_BOX,
 	IG_COLLECTIBLES_EXCHANGE_BOX,
-	IG_COSTUME_ENCHANT_STONE_BOX5,
 	IG_COSTUME_ENCHANT_STONE_BOX6,
 	IG_COSTUME_ENCHANT_STONE_BOX7,
 	IG_COSTUME_ENCHANT_STONE_BOX8,
@@ -797,6 +797,25 @@ enum e_random_item_group {
 	IG_COSTUME_ENCHANT_STONE_BOX19,
 	IG_PERFECTSIZE_MIX,
 	IG_MAGICPIERCING_MIX,
+	IG_MYSTERIOUS_COMBINATION_BOOK,
+	IG_SQUADPRIZE,
+	IG_ODINRELIC,
+	IG_SPEIMEN,
+	IG_MATERIAL,
+	IG_DELIVERY,
+	IG_MEMOBOX,
+	IG_MEMOBOX1,
+	IG_MEMOBOX2,
+	IG_MEMOBOX3,
+	IG_MEMOBOX4,
+	IG_MEMOBOX5,
+	IG_MEMOBOX6,
+	IG_MEMOBOX7,
+	IG_MEMOBOX8,
+	IG_MEMOBOX9,
+	IG_MEMOBOX10,
+	IG_MEMOBOX11,
+	IG_MEMOBOX12,
 };
 
 /// Enum for bound/sell restricted selling
@@ -855,6 +874,14 @@ struct s_roulette_db {
 	int items[MAX_ROULETTE_LEVEL]; /// Number of items in the list for each
 };
 extern struct s_roulette_db rd;
+
+/**
+* Extended Vending system [Lilith]
+**/
+struct s_item_vend {
+	unsigned short itemid;
+};
+extern struct s_item_vend item_vend[MAX_INVENTORY];
 
 ///Main item data struct
 struct item_data
@@ -1033,5 +1060,11 @@ void itemdb_reload(void);
 
 void do_final_itemdb(void);
 void do_init_itemdb(void);
+
+/**
+* Extended Vending system [Lilith]
+**/
+#define ITEMID_ZENY battle_config.item_zeny
+#define ITEMID_CASH battle_config.item_cash
 
 #endif /* ITEMDB_HPP */

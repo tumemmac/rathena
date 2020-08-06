@@ -391,8 +391,10 @@ TIMER_FUNC(npc_secure_timeout_timer){
 	t_tick cur_tick = gettick(); //ensure we are on last tick
 
 	if ((sd = map_id2sd(id)) == NULL || !sd->npc_id || sd->state.ignoretimeout) {
-		if (sd)
+		if( sd && sd->npc_idle_timer != INVALID_TIMER ){
+			delete_timer( sd->npc_idle_timer, npc_secure_timeout_timer );
 			sd->npc_idle_timer = INVALID_TIMER;
+		}
 		return 0; // Not logged in anymore OR no longer attached to a NPC OR using 'ignoretimeout' script command
 	}
 
@@ -409,7 +411,11 @@ TIMER_FUNC(npc_secure_timeout_timer){
 	if( DIFF_TICK(cur_tick,sd->npc_idle_tick) > (timeout*1000) ) {
 		pc_close_npc(sd,1);
 	} else if(sd->st && (sd->st->state == END || sd->st->state == CLOSE)){
-		sd->npc_idle_timer = INVALID_TIMER; //stop timer the script is already ending
+		// stop timer the script is already ending
+		if( sd->npc_idle_timer != INVALID_TIMER ){
+			delete_timer( sd->npc_idle_timer, npc_secure_timeout_timer );
+			sd->npc_idle_timer = INVALID_TIMER;
+		}
 	} else { //Create a new instance of ourselves to continue
 		sd->npc_idle_timer = add_timer(cur_tick + (SECURE_NPCTIMEOUT_INTERVAL*1000),npc_secure_timeout_timer,sd->bl.id,0);
 	}
@@ -1484,6 +1490,11 @@ bool npc_scriptcont(struct map_session_data* sd, int id, bool closing){
 
 	nullpo_retr(true, sd);
 
+#ifdef SECURE_NPCTIMEOUT
+	if( !closing && sd->npc_idle_timer == INVALID_TIMER && !sd->state.ignoretimeout )
+		return true;
+#endif
+
 	if( id != sd->npc_id ){
 		TBL_NPC* nd_sd = (TBL_NPC*)map_id2bl(sd->npc_id);
 		TBL_NPC* nd = BL_CAST(BL_NPC, target);
@@ -1501,7 +1512,8 @@ bool npc_scriptcont(struct map_session_data* sd, int id, bool closing){
 		}
 	}
 #ifdef SECURE_NPCTIMEOUT
-	sd->npc_idle_tick = gettick(); //Update the last NPC iteration
+	if( !closing )
+		sd->npc_idle_tick = gettick(); //Update the last NPC iteration
 #endif
 
 	/**
@@ -1682,7 +1694,7 @@ static enum e_CASHSHOP_ACK npc_cashshop_process_payment(struct npc_data *nd, int
  * @param item_list: List of items to purchase
  * @return clif_cashshop_ack value to display
  */
-int npc_cashshop_buylist(struct map_session_data *sd, int points, int count, struct PACKET_CZ_PC_BUY_CASH_POINT_ITEM_sub* item_list)
+int npc_cashshop_buylist(struct map_session_data *sd, int points, int count, unsigned short* item_list)
 {
 	int i, j, amount, new_, w, vt;
 	unsigned short nameid;
@@ -1702,8 +1714,8 @@ int npc_cashshop_buylist(struct map_session_data *sd, int points, int count, str
 	// Validating Process ----------------------------------------------------
 	for( i = 0; i < count; i++ )
 	{
-		nameid = item_list[i].itemId;
-		amount = item_list[i].amount;
+		nameid = item_list[i*2+1];
+		amount = item_list[i*2+0];
 		id = itemdb_exists(nameid);
 
 		if( !id || amount <= 0 )
@@ -1713,12 +1725,12 @@ int npc_cashshop_buylist(struct map_session_data *sd, int points, int count, str
 		if( j == nd->u.shop.count || nd->u.shop.shop_item[j].value <= 0 )
 			return ERROR_TYPE_ITEM_ID;
 
-		nameid = item_list[i].itemId = nd->u.shop.shop_item[j].nameid; //item_avail replacement
+		nameid = item_list[i*2+1] = nd->u.shop.shop_item[j].nameid; //item_avail replacement
 
 		if( !itemdb_isstackable2(id) && amount > 1 )
 		{
 			ShowWarning("Player %s (%d:%d) sent a hexed packet trying to buy %d of nonstackable item %hu!\n", sd->status.name, sd->status.account_id, sd->status.char_id, amount, nameid);
-			amount = item_list[i].amount = 1;
+			amount = item_list[i*2+0] = 1;
 		}
 
 		switch( pc_checkadditem(sd,nameid,amount) )
@@ -1745,8 +1757,8 @@ int npc_cashshop_buylist(struct map_session_data *sd, int points, int count, str
 
 	// Delivery Process ----------------------------------------------------
 	for( i = 0; i < count; i++ ) {
-		nameid = item_list[i].itemId;
-		amount = item_list[i].amount;
+		nameid = item_list[i*2+1];
+		amount = item_list[i*2+0];
 
 		if( !pet_create_egg(sd,nameid) ) {
 			struct item item_tmp;
@@ -3040,7 +3052,7 @@ static const char* npc_parse_shop(char* w1, char* w2, char* w3, char* w4, const 
 		nd->u.shop.shop_item[nd->u.shop.count].value = value;
 #if PACKETVER >= 20131223
 		nd->u.shop.shop_item[nd->u.shop.count].flag = 0;
-		if (type == NPCTYPE_MARKETSHOP )
+		if (type == NPCTYPE_MARKETSHOP)
 			nd->u.shop.shop_item[nd->u.shop.count].qty = qty;
 #endif
 		nd->u.shop.count++;
