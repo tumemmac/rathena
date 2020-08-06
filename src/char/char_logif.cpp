@@ -179,11 +179,11 @@ void chlogif_prepsend_global_accreg(void) {
 }
 
 void chlogif_send_global_accreg(const char *key, unsigned int index, int64 int_value, const char* string_value, bool is_string) {
-	if (!chlogif_isconnected())
-		return;
-
 	int nlen = WFIFOW(login_fd, 2);
 	size_t len;
+
+	if (!chlogif_isconnected())
+		return;
 
 	len = strlen(key)+1;
 
@@ -275,7 +275,7 @@ void chlogif_send_setaccoffline(int fd, int aid){
 	WFIFOSET(fd,6);
 }
 
-int chlogif_parse_ackconnect(int fd){
+int chlogif_parse_ackconnect(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 3)
 		return 0;
 
@@ -295,11 +295,10 @@ int chlogif_parse_ackconnect(int fd){
 	return 1;
 }
 
-int chlogif_parse_ackaccreq(int fd){
+int chlogif_parse_ackaccreq(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 21)
 		return 0;
 	{
-		struct char_session_data* sd;
 		uint32 account_id = RFIFOL(fd,2);
 		uint32 login_id1 = RFIFOL(fd,6);
 		uint32 login_id2 = RFIFOL(fd,10);
@@ -333,16 +332,16 @@ int chlogif_parse_ackaccreq(int fd){
  * Receive account data from login-server
  * AH 0x2717 <aid>.L <email>.40B <expiration_time>.L <group_id>.B <birthdate>.11B <pincode>.5B <pincode_change>.L <isvip>.B <char_vip>.B <char_billing>.B
  **/
-int chlogif_parse_reqaccdata(int fd){
+int chlogif_parse_reqaccdata(int fd, struct char_session_data* sd){
+	int u_fd; //user fd
 	if (RFIFOREST(fd) < 75)
 		return 0;
-	int u_fd; //user fd
-	struct char_session_data* sd;
 
 	// find the authenticated session with this account id
 	ARR_FIND( 0, fd_max, u_fd, session[u_fd] && (sd = (struct char_session_data*)session[u_fd]->session_data) && sd->auth && sd->account_id == RFIFOL(fd,2) );
 	if( u_fd < fd_max )
 	{
+		int server_id;
 		memcpy(sd->email, RFIFOP(fd,6), 40);
 		sd->expiration_time = (time_t)RFIFOL(fd,46);
 		sd->group_id = RFIFOB(fd,50);
@@ -358,10 +357,12 @@ int chlogif_parse_reqaccdata(int fd){
 		sd->isvip = RFIFOB(fd,72);
 		sd->chars_vip = RFIFOB(fd,73);
 		sd->chars_billing = RFIFOB(fd,74);
+		ARR_FIND( 0, ARRAYLENGTH(map_server), server_id, map_server[server_id].fd > 0 && map_server[server_id].map[0] );
 		// continued from char_auth_ok...
-		if(((charserv_config.max_connect_user == 0 || charserv_config.char_maintenance == 1) ||
+		if( server_id == ARRAYLENGTH(map_server) || //server not online, bugreport:2359
+			(((charserv_config.max_connect_user == 0 || charserv_config.char_maintenance == 1) ||
 			(charserv_config.max_connect_user > 0 && char_count_users() >= charserv_config.max_connect_user)) &&
-			sd->group_id < charserv_config.gm_allow_group) {
+			sd->group_id < charserv_config.gm_allow_group)) {
 			// refuse connection (over populated)
 			chclif_reject(u_fd,0);
 		} else {
@@ -376,7 +377,7 @@ int chlogif_parse_reqaccdata(int fd){
 	return 1;
 }
 
-int chlogif_parse_keepalive(int fd){
+int chlogif_parse_keepalive(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 2)
 		return 0;
 	RFIFOSKIP(fd,2);
@@ -424,7 +425,7 @@ void chlogif_parse_change_sex_sub(int sex, int acc, int char_id, int class_, int
 		inter_guild_sex_changed(guild_id, acc, char_id, sex);
 }
 
-int chlogif_parse_ackchangesex(int fd)
+int chlogif_parse_ackchangesex(int fd, struct char_session_data* sd)
 {
 	if (RFIFOREST(fd) < 7)
 		return 0;
@@ -518,7 +519,7 @@ int chlogif_parse_ackchangecharsex(int char_id, int sex)
 	return 0;
 }
 
-int chlogif_parse_ack_global_accreg(int fd){
+int chlogif_parse_ack_global_accreg(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 4 || RFIFOREST(fd) < RFIFOW(fd,2))
 		return 0;
 	else { //Receive account_reg2 registry, forward to map servers.
@@ -529,7 +530,7 @@ int chlogif_parse_ack_global_accreg(int fd){
 	return 1;
 }
 
-int chlogif_parse_accbannotification(int fd){
+int chlogif_parse_accbannotification(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 11)
 		return 0;
 	else { // send to all map-servers to disconnect the player
@@ -546,7 +547,7 @@ int chlogif_parse_accbannotification(int fd){
 	return 1;
 }
 
-int chlogif_parse_askkick(int fd){
+int chlogif_parse_askkick(int fd, struct char_session_data* sd){
 	if (RFIFOREST(fd) < 6)
 		return 0;
 	else {
@@ -582,7 +583,7 @@ int chlogif_parse_askkick(int fd){
 	return 1;
 }
 
-int chlogif_parse_updip(int fd){
+int chlogif_parse_updip(int fd, struct char_session_data* sd){
 	unsigned char buf[2];
 	uint32 new_ip = 0;
 
@@ -699,6 +700,7 @@ int chlogif_parse_AccInfoAck(int fd) {
 
 
 int chlogif_parse(int fd) {
+	struct char_session_data* sd = NULL;
 
 	// only process data from the login-server
 	if( fd != login_fd ) {
@@ -725,6 +727,8 @@ int chlogif_parse(int fd) {
 		}
 	}
 
+	sd = (struct char_session_data*)session[fd]->session_data;
+
 	while(RFIFOREST(fd) >= 2) {
 		// -1: Login server is not connected
 		//  0: Avoid processing followup packets (prev was probably incomplete) packet
@@ -732,16 +736,16 @@ int chlogif_parse(int fd) {
 		int next = 1;
 		uint16 command = RFIFOW(fd,0);
 		switch( command ) {
-			case 0x2711: next = chlogif_parse_ackconnect(fd); break;
-			case 0x2713: next = chlogif_parse_ackaccreq(fd); break;
-			case 0x2717: next = chlogif_parse_reqaccdata(fd); break;
-			case 0x2718: next = chlogif_parse_keepalive(fd); break;
+			case 0x2711: next = chlogif_parse_ackconnect(fd,sd); break;
+			case 0x2713: next = chlogif_parse_ackaccreq(fd, sd); break;
+			case 0x2717: next = chlogif_parse_reqaccdata(fd, sd); break;
+			case 0x2718: next = chlogif_parse_keepalive(fd, sd); break;
 			case 0x2721: next = chlogif_parse_AccInfoAck(fd); break;
-			case 0x2723: next = chlogif_parse_ackchangesex(fd); break;
-			case 0x2726: next = chlogif_parse_ack_global_accreg(fd); break;
-			case 0x2731: next = chlogif_parse_accbannotification(fd); break;
-			case 0x2734: next = chlogif_parse_askkick(fd); break;
-			case 0x2735: next = chlogif_parse_updip(fd); break;
+			case 0x2723: next = chlogif_parse_ackchangesex(fd, sd); break;
+			case 0x2726: next = chlogif_parse_ack_global_accreg(fd, sd); break;
+			case 0x2731: next = chlogif_parse_accbannotification(fd, sd); break;
+			case 0x2734: next = chlogif_parse_askkick(fd,sd); break;
+			case 0x2735: next = chlogif_parse_updip(fd,sd); break;
 			case 0x2743: next = chlogif_parse_vipack(fd); break;
 			default:
 				ShowError("Unknown packet 0x%04x received from login-server, disconnecting.\n", command);
