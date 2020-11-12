@@ -10621,7 +10621,7 @@ BUILDIN_FUNC(getmobdrops)
 			continue;
 
 		mapreg_setreg(reference_uid(add_str("$@MobDrop_item"), j), mob->dropitem[i].nameid);
-		mapreg_setreg(reference_uid(add_str("$@MobDrop_rate"), j), mob->dropitem[i].p);
+		mapreg_setreg(reference_uid(add_str("$@MobDrop_rate"), j), mob->dropitem[i].rate);
 
 		j++;
 	}
@@ -17442,7 +17442,7 @@ BUILDIN_FUNC(addmonsterdrop)
 		}
 		if(c) { //Fill in the slot with the item and rate
 			mob->dropitem[c].nameid = item_id;
-			mob->dropitem[c].p = (rate > 10000)?10000:rate;
+			mob->dropitem[c].rate = (rate > 10000)?10000:rate;
 			mob_reload_itemmob_data(); // Reload the mob search data stored in the item_data
 			script_pushint(st,1);
 		} else //No place to put the new drop
@@ -17484,7 +17484,7 @@ BUILDIN_FUNC(delmonsterdrop)
 		for(i = 0; i < MAX_MOB_DROP_TOTAL; i++) {
 			if(mob->dropitem[i].nameid == item_id) {
 				mob->dropitem[i].nameid = 0;
-				mob->dropitem[i].p = 0;
+				mob->dropitem[i].rate = 0;
 				mob_reload_itemmob_data(); // Reload the mob search data stored in the item_data
 				script_pushint(st,1);
 				return SCRIPT_CMD_SUCCESS;
@@ -23386,7 +23386,6 @@ BUILDIN_FUNC(getequiprandomoption) {
 */
 BUILDIN_FUNC(setrandomoption) {
 	struct map_session_data *sd;
-	struct s_random_opt_data *opt;
 	int pos, index, id, value, param, ep;
 	int i = -1;
 	if (!script_charid2sd(7, sd))
@@ -23397,7 +23396,9 @@ BUILDIN_FUNC(setrandomoption) {
 	value = script_getnum(st, 5);
 	param = script_getnum(st, 6);
 
-	if ((opt = itemdb_randomopt_exists((short)id)) == NULL) {
+	std::shared_ptr<s_random_opt_data> opt = random_option_db.find(static_cast<uint16>(id));
+
+	if (opt == nullptr) {
 		ShowError("buildin_setrandomoption: Random option ID %d does not exists.\n", id);
 		script_pushint(st, 0);
 		return SCRIPT_CMD_FAILURE;
@@ -24290,7 +24291,7 @@ BUILDIN_FUNC(getequiprefinecost) {
 			weapon_lv = REFINE_TYPE_SHADOW;
 	}
 
-	script_pushint(st, status_get_refine_cost(weapon_lv, type, info != 0));
+	script_pushint(st, status_get_refine_cost(weapon_lv, type, (enum refine_info_type)info));
 
 	return SCRIPT_CMD_SUCCESS;
 }
@@ -24909,6 +24910,30 @@ BUILDIN_FUNC(isnpccloaked)
 
 	script_pushint(st, npc_is_cloaked(nd, sd));
 	return SCRIPT_CMD_SUCCESS;
+}
+
+BUILDIN_FUNC(refineui){
+#if PACKETVER < 20161012
+	ShowError( "buildin_refineui: This command requires packet version 2016-10-12 or newer.\n" );
+	return SCRIPT_CMD_FAILURE;
+#else
+	struct map_session_data* sd;
+
+	if( !script_charid2sd(2,sd) ){
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if( !battle_config.feature_refineui ){
+		ShowError( "buildin_refineui: This command is disabled via configuration.\n" );
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if( !sd->state.refineui_open ){
+		clif_refineui_open(sd);
+	}
+
+	return SCRIPT_CMD_SUCCESS;
+#endif
 }
 
 #include "../custom/script.inc"
@@ -25573,8 +25598,10 @@ struct script_function buildin_func[] = {
 	BUILDIN_DEF(achievementexists,"i?"),
 	BUILDIN_DEF(achievementupdate,"iii?"),
 
-
+	// Refine UI
 	BUILDIN_DEF(getequiprefinecost,"iii?"),
+	BUILDIN_DEF(refineui,"?"),
+
 	BUILDIN_DEF2(round, "round", "ii"),
 	BUILDIN_DEF2(round, "ceil", "ii"),
 	BUILDIN_DEF2(round, "floor", "ii"),

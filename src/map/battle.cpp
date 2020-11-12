@@ -478,6 +478,13 @@ int64 battle_attr_fix(struct block_list *src, struct block_list *target, int64 d
 				if (sc->data[SC_TELEKINESIS_INTENSE])
 					ratio += sc->data[SC_TELEKINESIS_INTENSE]->val3;
 				break;
+			case ELE_POISON:
+				if (tsc->data[SC_CLOUD_POISON])
+#ifdef RENEWAL
+					ratio += 5 * tsc->data[SC_CLOUD_POISON]->val1;
+#else
+					damage += (int64)(damage * 25 / 100);
+#endif
 		}
 	}
 
@@ -539,12 +546,6 @@ int64 battle_attr_fix(struct block_list *src, struct block_list *target, int64 d
 					ratio += tsc->data[SC_VENOMIMPRESS]->val2;
 #else
 					damage += (int64)(damage * tsc->data[SC_VENOMIMPRESS]->val2 / 100);
-#endif
-                if (tsc->data[SC_CLOUD_POISON])
-#ifdef RENEWAL
-                    ratio += 5 * tsc->data[SC_CLOUD_POISON]->val1;
-#else
-                    damage += (int64)(damage * 25 / 100);
 #endif
 				break;
 			case ELE_WIND:
@@ -1673,11 +1674,6 @@ int64 battle_calc_damage(struct block_list *src,struct block_list *bl,struct Dam
 					damage += damage * sce->val1 / 100;
 			}
 		}
-		/* Self Buff that destroys the armor of any target hit with melee or ranged physical attacks */
-		if( sc->data[SC_SHIELDSPELL_REF] && sc->data[SC_SHIELDSPELL_REF]->val1 == 1 && flag&BF_WEAPON ) {
-			skill_break_equip(src,bl, EQP_ARMOR, 10000, BCT_ENEMY); // 100% chance (http://irowiki.org/wiki/Shield_Spell#Level_3_spells_.28refine_based.29)
-			status_change_end(src,SC_SHIELDSPELL_REF,INVALID_TIMER);
-		}
 
 		if (sc->data[SC_POISONINGWEAPON] && flag&BF_SHORT && (skill_id == 0 || skill_id == GC_VENOMPRESSURE) && damage > 0) {
 			damage += damage * 10 / 100;
@@ -1843,7 +1839,7 @@ bool battle_can_hit_gvg_target(struct block_list *src,struct block_list *bl,uint
 
 	if (ud && ud->immune_attack)
 		return false;
-	if(md && md->guardian_data) {
+	if(md && (md->guardian_data || md->special_state.ai == AI_GUILD)) {
 		if ((status_bl_has_mode(bl,MD_SKILL_IMMUNE) || (class_ == MOBID_EMPERIUM && !skill_get_inf2(skill_id, INF2_TARGETEMPERIUM))) && flag&BF_SKILL) //Skill immunity.
 			return false;
 		if( src->type != BL_MOB || mob_is_clone( ((struct mob_data*)src)->mob_id ) ){
@@ -1854,6 +1850,9 @@ bool battle_can_hit_gvg_target(struct block_list *src,struct block_list *bl,uint
 
 			if (g && battle_config.guild_max_castles && guild_checkcastles(g)>=battle_config.guild_max_castles)
 				return false; // [MouseJstr]
+
+			if (md->special_state.ai == AI_GUILD && g != nullptr && g->guild_id == md->master_id)
+				return false;
 		}
 	}
 	return true;
@@ -3048,6 +3047,11 @@ static int battle_get_weapon_element(struct Damage* wd, struct block_list *src, 
 			if (sc && sc->data[SC_BANDING] && sc->data[SC_BANDING]->val2 > 4)
 				element = ELE_HOLY;
 			break;
+		case GN_CARTCANNON:
+		case NC_ARMSCANNON:
+			if (sd && sd->state.arrow_atk > 0)
+				element = sd->bonus.arrow_ele;
+			break;
 		case SJ_PROMINENCEKICK:
  				element = ELE_FIRE;
  			break;
@@ -3082,29 +3086,38 @@ static int battle_get_weapon_element(struct Damage* wd, struct block_list *src, 
  */
 static void battle_calc_element_damage(struct Damage* wd, struct block_list *src, struct block_list *target, uint16 skill_id, uint16 skill_lv)
 {
-	struct map_session_data *sd = BL_CAST(BL_PC, src);
-	struct status_change *sc = status_get_sc(src);
-	struct status_data *sstatus = status_get_status_data(src);
-	struct status_data *tstatus = status_get_status_data(target);
-	int element = skill_get_ele(skill_id, skill_lv);
-	int left_element = battle_get_weapon_element(wd, src, target, skill_id, skill_lv, EQI_HAND_L, true);
-	int right_element = battle_get_weapon_element(wd, src, target, skill_id, skill_lv, EQI_HAND_R, true);
 	std::bitset<NK_MAX> nk = battle_skill_get_damage_properties(skill_id, wd->miscflag);
 
-	//Elemental attribute fix
-	if(!nk[NK_IGNOREELEMENT]) {
-		//Non-pc physical melee attacks (mob, pet, homun) are "non elemental", they deal 100% to all target elements
-		//However the "non elemental" attacks still get reduced by "Neutral resistance"
-		//Also non-pc units have only a defending element, but can inflict elemental attacks using skills [exneval]
-		if(battle_config.attack_attr_none&src->type)
-			if(((!skill_id && !right_element) || (skill_id && (element == ELE_WEAPON || !right_element))) &&
-				(wd->flag&(BF_SHORT|BF_WEAPON)) == (BF_SHORT|BF_WEAPON))
-				return;
-		if(wd->damage > 0) {
-			//Forced to its element
-			wd->damage = battle_attr_fix(src, target, wd->damage, right_element, tstatus->def_ele, tstatus->ele_lv);
+	// Elemental attribute fix
+	if(!nk[NK_IGNOREELEMENT] && (wd->damage > 0 || wd->damage2 > 0)) {
+		struct map_session_data *sd = BL_CAST(BL_PC, src);
+		struct status_change *sc = status_get_sc(src);
+		struct status_data *sstatus = status_get_status_data(src);
+		struct status_data *tstatus = status_get_status_data(target);
+		int left_element = battle_get_weapon_element(wd, src, target, skill_id, skill_lv, EQI_HAND_L, true);
+		int right_element = battle_get_weapon_element(wd, src, target, skill_id, skill_lv, EQI_HAND_R, true);
 
-			switch( skill_id ) {
+		switch (skill_id) {
+			case PA_SACRIFICE:
+			case RK_DRAGONBREATH:
+			case RK_DRAGONBREATH_WATER:
+			case NC_SELFDESTRUCTION:
+			case HFLI_SBR44:
+				wd->damage = battle_attr_fix(src, target, wd->damage, right_element, tstatus->def_ele, tstatus->ele_lv);
+				if (is_attack_left_handed(src, skill_id))
+					wd->damage2 = battle_attr_fix(src, target, wd->damage2, left_element, tstatus->def_ele, tstatus->ele_lv);
+				break;
+			default:
+				if (skill_id == 0 && (battle_config.attack_attr_none & src->type))
+					return; // Non-player basic attacks are non-elemental, they deal 100% against all defense elements
+#ifdef RENEWAL
+				if (sd == nullptr) { // Renewal player's elemental damage calculation is already done before this point, only calculate for everything else
+#endif
+					wd->damage = battle_attr_fix(src, target, wd->damage, right_element, tstatus->def_ele, tstatus->ele_lv);
+					if (is_attack_left_handed(src, skill_id))
+						wd->damage2 = battle_attr_fix(src, target, wd->damage2, left_element, tstatus->def_ele, tstatus->ele_lv);
+					break;
+				}
 				case MC_CARTREVOLUTION:
 				case SR_GATEOFHELL:
 				//case SR_TIGERCANNON:
@@ -3118,20 +3131,44 @@ static void battle_calc_element_damage(struct Damage* wd, struct block_list *src
 					//Forced to ammo's element
 					wd->damage = battle_attr_fix(src, target, wd->damage, (sd && sd->bonus.arrow_ele) ? sd->bonus.arrow_ele : ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
 					break;
-			}
+			
 		}
-		if (is_attack_left_handed(src, skill_id) && wd->damage2 > 0)
-			wd->damage2 = battle_attr_fix(src, target, wd->damage2, left_element ,tstatus->def_ele, tstatus->ele_lv);
-		if (sc && sc->data[SC_WATK_ELEMENT] && (wd->damage || wd->damage2)) {
-			// Descriptions indicate this means adding a percent of a normal attack in another element. [Skotlex]
-			int64 damage = battle_calc_base_damage(src, sstatus, &sstatus->rhw, sc, tstatus->size, (is_skill_using_arrow(src, skill_id)?2:0)) * sc->data[SC_WATK_ELEMENT]->val2 / 100;
 
-			wd->damage += battle_attr_fix(src, target, damage, sc->data[SC_WATK_ELEMENT]->val1, tstatus->def_ele, tstatus->ele_lv);
-			if (is_attack_left_handed(src, skill_id)) {
-				damage = battle_calc_base_damage(src, sstatus, &sstatus->lhw, sc, tstatus->size, (is_skill_using_arrow(src, skill_id)?2:0)) * sc->data[SC_WATK_ELEMENT]->val2 / 100;
-				wd->damage2 += battle_attr_fix(src, target, damage, sc->data[SC_WATK_ELEMENT]->val1, tstatus->def_ele, tstatus->ele_lv);
-			}
+		// Forced to neutral skills [helvetica]
+		// Skills forced to neutral gain benefits from weapon element but final damage is considered "neutral" and resistances are applied again
+		switch (skill_id) {
+#ifdef RENEWAL
+			case MO_INVESTIGATE:
+			case CR_SHIELDBOOMERANG:
+			case PA_SHIELDCHAIN:
+#endif
+			case MC_CARTREVOLUTION:
+			case HW_MAGICCRASHER:
+			case SR_FALLENEMPIRE:
+			case SR_TIGERCANNON:
+			case SR_CRESCENTELBOW_AUTOSPELL:
+			case SR_GATEOFHELL:
+				wd->damage = battle_attr_fix(src, target, wd->damage, ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
+				if (is_attack_left_handed(src, skill_id))
+					wd->damage2 = battle_attr_fix(src, target, wd->damage2, ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
+				break;
 		}
+
+#ifdef RENEWAL
+		if (sd == nullptr) { // Only monsters have a single ATK for element, in pre-renewal we also apply element to entire ATK on players [helvetica]
+#endif
+			if (sc && sc->data[SC_WATK_ELEMENT]) { // Descriptions indicate this means adding a percent of a normal attack in another element [Skotlex]
+				int64 damage = battle_calc_base_damage(src, sstatus, &sstatus->rhw, sc, tstatus->size, (is_skill_using_arrow(src, skill_id) ? 2 : 0)) * sc->data[SC_WATK_ELEMENT]->val2 / 100;
+
+				wd->damage += battle_attr_fix(src, target, damage, sc->data[SC_WATK_ELEMENT]->val1, tstatus->def_ele, tstatus->ele_lv);
+				if (is_attack_left_handed(src, skill_id)) {
+					damage = battle_calc_base_damage(src, sstatus, &sstatus->lhw, sc, tstatus->size, (is_skill_using_arrow(src, skill_id) ? 2 : 0)) * sc->data[SC_WATK_ELEMENT]->val2 / 100;
+					wd->damage2 += battle_attr_fix(src, target, damage, sc->data[SC_WATK_ELEMENT]->val1, tstatus->def_ele, tstatus->ele_lv);
+				}
+			}
+#ifdef RENEWAL
+		}
+#endif
 	}
 }
 
@@ -3547,7 +3584,7 @@ static void battle_calc_skill_base_damage(struct Damage* wd, struct block_list *
 //For quick div adjustment.
 #define DAMAGE_DIV_FIX(dmg, div) { if ((div) < 0) { (div) *= -1; (dmg) /= (div); } (dmg) *= (div); }
 #define DAMAGE_DIV_FIX2(dmg, div) { if ((div) > 1) (dmg) *= div; }
-#define DAMAGE_DIV_FIX_RENEWAL(wd, div) do { int div_ = (div); DAMAGE_DIV_FIX2((wd).statusAtk, div_); DAMAGE_DIV_FIX2((wd).weaponAtk, div_); DAMAGE_DIV_FIX2((wd).equipAtk, div_); DAMAGE_DIV_FIX2((wd).masteryAtk, div_); } while(0);
+
 /*================================================= [Playtester]
  * Applies DAMAGE_DIV_FIX and checks for min damage
  * @param d: Damage struct to apply DAMAGE_DIV_FIX to
@@ -4369,16 +4406,6 @@ static int battle_calc_attack_skill_ratio(struct Damage* wd, struct block_list *
 				skillratio += 2900 + (status_get_max_hp(src) - status_get_hp(src));
 			RE_LVL_DMOD(100);
 			break;
-		case LG_SHIELDSPELL:
-			if (sd && skill_lv == 1) { // [(Casters Base Level x 4) + (Shield DEF x 10) + (Casters VIT x 2)] %
-				short index = sd->equip_index[EQI_HAND_L];
-
-				skillratio += -100 + status_get_lv(src) * 4 + status_get_vit(src) * 2;
-				if (index >= 0 && sd->inventory_data[index] && sd->inventory_data[index]->type == IT_ARMOR)
-					skillratio += sd->inventory_data[index]->def * 10;
-			} else
-				skillratio = 0; // Prevent damage since level 2 is MATK. [Aleos]
-			break;
 		case LG_MOONSLASHER:
 			skillratio += -100 + 120 * skill_lv + ((sd) ? pc_checkskill(sd,LG_OVERBRAND) * 80 : 0);
 			RE_LVL_DMOD(100);
@@ -4390,13 +4417,6 @@ static int battle_calc_attack_skill_ratio(struct Damage* wd, struct block_list *
 				skillratio += -100 + 300 * skill_lv;
 			skillratio += ((sd) ? pc_checkskill(sd, CR_SPEARQUICKEN) * 50 : 0);
 			RE_LVL_DMOD(100);
-			break;
-		case LG_OVERBRAND_BRANDISH:
-			skillratio += -100 + 300 * skill_lv + ((sstatus->str + sstatus->dex) / 6); // !TOD: What's the STR/DEX bonus?
-			RE_LVL_DMOD(100);
-			break;
-		case LG_OVERBRAND_PLUSATK: // Only Piercing and Swing damage get RE_LVL_DMOD bonus damage
-			skillratio += -100 + 200 * skill_lv + rnd()%90 + 10;
 			break;
 		case LG_EARTHDRIVE:
 			skillratio += -100 + 380 * skill_lv + ((sstatus->str + sstatus->vit) / 6); // !TODO: What's the STR/VIT bonus?
@@ -5828,10 +5848,7 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
 		}
 	}
 
-#ifdef RENEWAL
-	if(!sd) // monsters only have a single ATK for element, in pre-renewal we also apply element to entire ATK on players [helvetica]
-#endif
-		battle_calc_element_damage(&wd, src, target, skill_id, skill_lv);
+	battle_calc_element_damage(&wd, src, target, skill_id, skill_lv);
 
 	if(skill_id == CR_GRANDCROSS || skill_id == NPC_GRANDDARKNESS)
 		return wd; //Enough, rest is not needed.
@@ -5953,58 +5970,6 @@ static struct Damage battle_calc_weapon_attack(struct block_list *src, struct bl
 #endif
 	}
 
-#ifdef RENEWAL
-	// forced to neutral skills [helvetica]
-	// skills forced to neutral gain benefits from weapon element
-	// but final damage is considered "neutral" and resistances are applied again
-	switch (skill_id) {
-		case MC_CARTREVOLUTION:
-		case MO_INVESTIGATE:
-		case SR_GATEOFHELL:
-		case KO_BAKURETSU:
-		//case NC_MAGMA_ERUPTION:
-			// Forced to neutral element
-			wd.damage = battle_attr_fix(src, target, wd.damage, ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-			break;
-		case CR_SHIELDBOOMERANG:
-		case LK_SPIRALPIERCE:
-		case ML_SPIRALPIERCE:
-		case PA_SHIELDCHAIN:
-		case PA_SACRIFICE:
-		case RK_DRAGONBREATH:
-		case RK_DRAGONBREATH_WATER:
-		case NC_SELFDESTRUCTION:
-		case KO_HAPPOKUNAI: {
-				int64 tmp = wd.damage;
-
-				if (sd) {
-					if (skill_id == PA_SHIELDCHAIN) {
-						wd.damage = battle_attr_fix(src, target, wd.damage, ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-						if (wd.damage > 0) {
-							wd.damage = battle_attr_fix(src, target, tmp, right_element, tstatus->def_ele, tstatus->ele_lv);
-							if (!wd.damage)
-								wd.damage = battle_attr_fix(src, target, tmp, ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-						}
-					} else if (skill_id == KO_HAPPOKUNAI) {
-						wd.damage = battle_attr_fix(src, target, wd.damage, (sd->bonus.arrow_ele) ? sd->bonus.arrow_ele : ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-						if (wd.damage > 0) {
-							wd.damage = battle_attr_fix(src, target, tmp, right_element, tstatus->def_ele, tstatus->ele_lv);
-							if (!wd.damage)
-								wd.damage = battle_attr_fix(src, target, tmp, (sd->bonus.arrow_ele) ? sd->bonus.arrow_ele : ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-						}
-					} else
-						wd.damage = battle_attr_fix(src, target, wd.damage, right_element, tstatus->def_ele, tstatus->ele_lv);
-				}
-			}
-			break;
-		case GN_CARTCANNON: // Cart Cannon gets forced to element of cannon ball (neutral or holy/shadow/ghost)
-			wd.damage = battle_attr_fix(src, target, wd.damage, (sd && sd->bonus.arrow_ele) ? sd->bonus.arrow_ele : ELE_NEUTRAL, tstatus->def_ele, tstatus->ele_lv);
-			break;
-	}
-
-	// perform multihit calculations
-	DAMAGE_DIV_FIX_RENEWAL(wd, wd.div_);
-#endif
 	// only do 1 dmg to plant, no need to calculate rest
 	if(infdef){
 		battle_calc_attack_plant(&wd, src, target, skill_id, skill_lv);
@@ -6105,14 +6070,6 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list 
 		case NPC_EARTHQUAKE:
 			s_ele = ELE_NEUTRAL;
 			break;
-		case LG_SHIELDSPELL:
-			if (skill_lv == 2)
-				s_ele = ELE_HOLY;
-			break;
-		case LG_RAYOFGENESIS:
-			if( sc && sc->data[SC_INSPIRATION] )
-				s_ele = ELE_NEUTRAL;
-			break;
 		case WL_HELLINFERNO:
 			if (mflag & 2) { // ELE_DARK
 				s_ele = ELE_DARK;
@@ -6143,6 +6100,10 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list 
 			break;
 		case AB_ADORAMUS:
 			if (sc && sc->data[SC_ANCILLA])
+				s_ele = ELE_NEUTRAL;
+			break;
+		case LG_RAYOFGENESIS:
+			if (sc && sc->data[SC_INSPIRATION])
 				s_ele = ELE_NEUTRAL;
 			break;
 	}
@@ -6524,15 +6485,9 @@ struct Damage battle_calc_magic_attack(struct block_list *src,struct block_list 
 						break;
 					case LG_RAYOFGENESIS:
 						skillratio += -100 + 230 * skill_lv + sstatus->int_ / 6; // !TODO: What's the INT bonus?
-						if(sc && sc->data[SC_INSPIRATION])
+						if (sc && sc->data[SC_INSPIRATION])
 							skillratio += 70 * skill_lv;
 						RE_LVL_DMOD(100);
-						break;
-					case LG_SHIELDSPELL: // [(Casters Base Level x 4) + (Shield MDEF x 100) + (Casters INT x 2)] %
-						if (sd && skill_lv == 2)
-							skillratio += -100 + status_get_lv(src) * 4 + sd->bonus.shieldmdef * 100 + status_get_int(src) * 2;
-						else
-							skillratio = 0;
 						break;
 					case WM_METALICSOUND:
 						skillratio += -100 + 120 * skill_lv + 60 * ((sd) ? pc_checkskill(sd, WM_LESSON) : 1);
@@ -7295,9 +7250,8 @@ int64 battle_calc_return_damage(struct block_list* bl, struct block_list *src, i
 	ssc = status_get_sc(src);
 
 	if (sc) { // These statuses do not reflect any damage (off the target)
-		if (sc->data[SC_WHITEIMPRISON] || sc->data[SC_DARKCROW] ||
-			(sc->data[SC_KYOMU] && (!ssc || !ssc->data[SC_SHIELDSPELL_DEF]))) // Nullify reflecting ability except for Shield Spell - Def
-				return 0;
+		if (sc->data[SC_WHITEIMPRISON] || sc->data[SC_DARKCROW] || sc->data[SC_KYOMU])
+			return 0;
 	}
 
 	if (ssc) {
@@ -7347,11 +7301,6 @@ int64 battle_calc_return_damage(struct block_list* bl, struct block_list *src, i
 					status_change_end(bl, SC_DEATHBOUND, INVALID_TIMER);
 					rdamage += rd1 * 70 / 100; // Target receives 70% of the amplified damage. [Rytech]
 				}
-			}
-
-			if( sc->data[SC_SHIELDSPELL_DEF] && sc->data[SC_SHIELDSPELL_DEF]->val1 == 2 && !status_bl_has_mode(src,MD_STATUS_IMMUNE) ){
-					rdamage += damage * sc->data[SC_SHIELDSPELL_DEF]->val2 / 100;
-					if (rdamage < 1) rdamage = 1;
 			}
 		}
 	} else {
@@ -8224,8 +8173,12 @@ int battle_check_target( struct block_list *src, struct block_list *target,int f
 		case BL_PET:
 			if (t_bl->type != BL_MOB && flag&BCT_ENEMY)
 				return 0; //Pet may not attack non-mobs.
-			if (t_bl->type == BL_MOB && ((TBL_MOB*)t_bl)->guardian_data && flag&BCT_ENEMY)
-				return 0; //pet may not attack Guardians/Emperium
+			if (t_bl->type == BL_MOB && flag & BCT_ENEMY) {
+				mob_data *md = BL_CAST(BL_MOB, t_bl);
+
+				if (md->guardian_data || md->special_state.ai == AI_GUILD)
+					return 0; //pet may not attack Guardians/Emperium
+			}
 			break;
 		case BL_SKILL: {
 				struct skill_unit *su = (struct skill_unit *)src;
@@ -8995,6 +8948,7 @@ static const struct _battle_data {
 	{ "homunculus_starving_rate",           &battle_config.homunculus_starving_rate,        10,     0,      100,            },
 	{ "homunculus_starving_delay",          &battle_config.homunculus_starving_delay,       20000,  0,      INT_MAX,        },
 	{ "drop_connection_on_quit",            &battle_config.drop_connection_on_quit,         0,      0,      1,              },
+	{ "feature.refineui",                   &battle_config.feature_refineui,                3,      0,      3,              },
 
 #include "../custom/battle_config_init.inc"
 };
@@ -9141,6 +9095,19 @@ void battle_adjust_conf()
 	if (battle_config.feature_pet_autofeed) {
 		ShowWarning("conf/battle/feature.conf pet auto feed is enabled but it requires PACKETVER 2014-10-08 or newer, disabling...\n");
 		battle_config.feature_pet_autofeed = 0;
+	}
+#endif
+
+#if PACKETVER < 20161012
+	if (battle_config.feature_refineui) {
+		ShowWarning("conf/battle/feature.conf refine UI is enabled but it requires PACKETVER 2016-10-12 or newer, disabling...\n");
+		battle_config.feature_refineui = 0;
+	}
+#else
+	// Check if Refine UI is only enabled in scripts
+	if( battle_config.feature_refineui == 2 ){
+		ShowWarning("conf/battle/feature.conf refine UI is enabled in scripts but disabled in general, enabling...\n");
+		battle_config.feature_refineui = 3;
 	}
 #endif
 

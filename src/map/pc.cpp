@@ -3058,6 +3058,15 @@ void pc_bonus(struct map_session_data *sd,int type,int val)
 			if(sd->state.lr_flag != 2)
 				sd->indexed_bonus.param_bonus[type-SP_STR]+=val;
 			break;
+		case SP_POW:
+		case SP_STA:
+		case SP_WIS:
+		case SP_SPL:
+		case SP_CON:
+		case SP_CRT:
+			if(sd->state.lr_flag != 2)
+				sd->indexed_bonus.param_bonus[type-SP_POW]+=val;
+			break;
 		case SP_ATK1:
 			if(!sd->state.lr_flag) {
 				bonus = status->rhw.atk + val;
@@ -5839,7 +5848,7 @@ bool pc_steal_item(struct map_session_data *sd,struct block_list *bl, uint16 ski
 	// Try dropping one item, in the order from first to last possible slot.
 	// Droprate is affected by the skill success rate.
 	for( i = 0; i < MAX_STEAL_DROP; i++ )
-		if( md->db->dropitem[i].nameid > 0 && !md->db->dropitem[i].steal_protected && itemdb_exists(md->db->dropitem[i].nameid) && rnd() % 10000 < md->db->dropitem[i].p
+		if( md->db->dropitem[i].nameid > 0 && !md->db->dropitem[i].steal_protected && itemdb_exists(md->db->dropitem[i].nameid) && rnd() % 10000 < md->db->dropitem[i].rate
 #ifndef RENEWAL
 		* rate/100.
 #endif
@@ -5871,11 +5880,11 @@ bool pc_steal_item(struct map_session_data *sd,struct block_list *bl, uint16 ski
 	log_pick_mob(md, LOG_TYPE_STEAL, -1, &tmp_item);
 
 	//A Rare Steal Global Announce by Lupus
-	if(md->db->dropitem[i].p<=battle_config.rare_drop_announce) {
+	if(md->db->dropitem[i].rate <= battle_config.rare_drop_announce) {
 		struct item_data *i_data;
 		char message[128];
 		i_data = itemdb_search(itemid);
-		sprintf (message, msg_txt(sd,542), (sd->status.name[0])?sd->status.name :"GM", md->db->jname, i_data->ename.c_str(), (float)md->db->dropitem[i].p/100);
+		sprintf (message, msg_txt(sd,542), (sd->status.name[0])?sd->status.name :"GM", md->db->jname, i_data->ename.c_str(), (float)md->db->dropitem[i].rate / 100);
 		//MSG: "'%s' stole %s's %s (chance: %0.02f%%)"
 		intif_broadcast(message, strlen(message) + 1, BC_DEFAULT);
 	}
@@ -7889,6 +7898,13 @@ int pc_resetlvl(struct map_session_data* sd,int type)
 		sd->status.int_=1;
 		sd->status.dex=1;
 		sd->status.luk=1;
+		sd->status.pow=0;
+		sd->status.sta=0;
+		sd->status.wis=0;
+		sd->status.spl=0;
+		sd->status.con=0;
+		sd->status.crt=0;
+
 		if(sd->status.class_ == JOB_NOVICE_HIGH) {
 			sd->status.status_point=100;	// not 88 [celest]
 			// give platinum skills upon changing
@@ -8789,6 +8805,12 @@ int64 pc_readparam(struct map_session_data* sd,int64 type)
 		case SP_INT:             val = sd->status.int_; break;
 		case SP_DEX:             val = sd->status.dex; break;
 		case SP_LUK:             val = sd->status.luk; break;
+		case SP_POW:             val = sd->status.pow; break;
+		case SP_STA:             val = sd->status.sta; break;
+		case SP_WIS:             val = sd->status.wis; break;
+		case SP_SPL:             val = sd->status.spl; break;
+		case SP_CON:             val = sd->status.con; break;
+		case SP_CRT:             val = sd->status.crt; break;
 		case SP_KARMA:           val = sd->status.karma; break;
 		case SP_MANNER:          val = sd->status.manner; break;
 		case SP_FAME:            val = sd->status.fame; break;
@@ -9051,6 +9073,24 @@ bool pc_setparam(struct map_session_data *sd,int64 type,int64 val_tmp)
 		break;
 	case SP_LUK:
 		sd->status.luk = cap_value(val, 1, pc_maxparameter(sd,PARAM_LUK));
+		break;
+	case SP_POW:
+		sd->status.pow = cap_value(val, 0, pc_maxparameter(sd,PARAM_POW));
+		break;
+	case SP_STA:
+		sd->status.sta = cap_value(val, 0, pc_maxparameter(sd,PARAM_STA));
+		break;
+	case SP_WIS:
+		sd->status.wis = cap_value(val, 0, pc_maxparameter(sd,PARAM_WIS));
+		break;
+	case SP_SPL:
+		sd->status.spl = cap_value(val, 0, pc_maxparameter(sd,PARAM_SPL));
+		break;
+	case SP_CON:
+		sd->status.con = cap_value(val, 0, pc_maxparameter(sd,PARAM_CON));
+		break;
+	case SP_CRT:
+		sd->status.crt = cap_value(val, 0, pc_maxparameter(sd,PARAM_CRT));
 		break;
 	case SP_KARMA:
 		sd->status.karma = val;

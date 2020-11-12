@@ -136,6 +136,23 @@ enum npc_timeout_type {
 	NPCT_WAIT  = 2,
 };
 
+/// Enum of Player's Parameter
+enum e_params {
+	PARAM_STR = 0,
+	PARAM_AGI,
+	PARAM_VIT,
+	PARAM_INT,
+	PARAM_DEX,
+	PARAM_LUK,
+	PARAM_POW,
+	PARAM_STA,
+	PARAM_WIS,
+	PARAM_SPL,
+	PARAM_CON,
+	PARAM_CRT,
+	PARAM_MAX
+};
+
 extern unsigned int equip_bitmask[EQI_MAX];
 
 #define equip_index_check(i) ( (i) >= EQI_ACC_L && (i) < EQI_MAX )
@@ -334,6 +351,7 @@ struct map_session_data {
 		bool cashshop_open;
 		bool sale_open;
 		unsigned int block_action : 10;
+		bool refineui_open;
 	} state;
 	struct {
 		unsigned char no_weapon_damage, no_magic_damage, no_misc_damage;
@@ -431,7 +449,7 @@ struct map_session_data {
 
 	// here start arrays to be globally zeroed at the beginning of status_calc_pc()
 	struct s_indexed_bonus {
-		int param_bonus[6], param_equip[6]; //Stores card/equipment bonuses.
+		int param_bonus[PARAM_MAX], param_equip[PARAM_MAX]; //Stores card/equipment bonuses.
 		int subele[ELE_MAX];
 		int subele_script[ELE_MAX];
 		int subdefele[ELE_MAX];
@@ -984,7 +1002,7 @@ public:
 #define pc_isidle_party(sd)   ( (sd)->chatID || (sd)->state.vending || (sd)->state.buyingstore || DIFF_TICK(last_tick, (sd)->idletime) >= battle_config.idle_no_share )
 #define pc_isidle_hom(sd)     ( (sd)->hd && ( (sd)->chatID || (sd)->state.vending || (sd)->state.buyingstore || DIFF_TICK(last_tick, (sd)->idletime_hom) >= battle_config.hom_idle_no_share ) )
 #define pc_istrading(sd)      ( (sd)->npc_id || (sd)->state.vending || (sd)->state.buyingstore || (sd)->state.trading )
-#define pc_cant_act(sd)       ( (sd)->npc_id || (sd)->state.vending || (sd)->state.buyingstore || (sd)->chatID || ((sd)->sc.opt1 && (sd)->sc.opt1 != OPT1_BURNING) || (sd)->state.trading || (sd)->state.storage_flag || (sd)->state.prevend )
+#define pc_cant_act(sd)       ( (sd)->npc_id || (sd)->state.vending || (sd)->state.buyingstore || (sd)->chatID || ((sd)->sc.opt1 && (sd)->sc.opt1 != OPT1_BURNING) || (sd)->state.trading || (sd)->state.storage_flag || (sd)->state.prevend || (sd)->state.refineui_open )
 
 /* equals pc_cant_act except it doesn't check for chat rooms or npcs */
 #define pc_cant_act2(sd)       ( (sd)->state.vending || (sd)->state.buyingstore || ((sd)->sc.opt1 && (sd)->sc.opt1 != OPT1_BURNING) || (sd)->state.trading || (sd)->state.storage_flag || (sd)->state.prevend )
@@ -1016,22 +1034,6 @@ static inline bool pc_hasprogress(struct map_session_data *sd, enum e_wip_block 
 	return sd == NULL || (sd->state.workinprogress&progress) == progress;
 }
 
-/// Enum of Player's Parameter
-enum e_params : uint8 {
-	PARAM_STR = 1,
-	PARAM_AGI,
-	PARAM_VIT,
-	PARAM_INT,
-	PARAM_DEX,
-	PARAM_LUK,
-	PARAM_POW,
-	PARAM_STA,
-	PARAM_WIS,
-	PARAM_SPL,
-	PARAM_CON,
-	PARAM_CRT,
-	PARAM_MAX
-};
 uint16 pc_maxparameter(struct map_session_data *sd, e_params param);
 short pc_maxaspd(struct map_session_data *sd);
 

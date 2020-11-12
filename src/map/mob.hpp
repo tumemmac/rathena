@@ -76,6 +76,7 @@ enum MOBID {
 	MOBID_S_HORNET			= 2158,
 	MOBID_S_GIANT_HORNET,
 	MOBID_S_LUCIOLA_VESPA,
+	MOBID_GUILD_SKILL_FLAG	= 20269,
 };
 
 ///Mob skill states.
@@ -162,9 +163,9 @@ struct s_mob_lootitem {
 /// Struct for monster's drop item
 struct s_mob_drop {
 	t_itemid nameid;
-	int p;
-	uint8 randomopt_group;
-	unsigned steal_protected : 1;
+	uint32 rate;
+	uint16 randomopt_group;
+	bool steal_protected;
 };
 
 struct mob_db {

@@ -2727,19 +2727,22 @@ void clif_additem( struct map_session_data *sd, int n, int amount, unsigned char
 		p.type = itemtype( sd->inventory.u.items_inventory[n].nameid );
 #if PACKETVER >= 20061218
 		p.HireExpireDate = sd->inventory.u.items_inventory[n].expire_time;
-#endif
 #if PACKETVER >= 20071002
 		/* why restrict the flag to non-stackable? because this is the only packet allows stackable to,
 		 * show the color, and therefore it'd be inconsistent with the rest (aka it'd show yellow, you relog/refresh and boom its gone)
 		 */
 		p.bindOnEquipType = sd->inventory.u.items_inventory[n].bound && !itemdb_isstackable2( sd->inventory_data[n] ) ? 2 : sd->inventory_data[n]->flag.bindOnEquip ? 1 : 0;
-#endif
 #if PACKETVER >= 20150226
 		clif_add_random_options( p.option_data, &sd->inventory.u.items_inventory[n] );
-#endif
 #if PACKETVER >= 20160921
 		p.favorite = sd->inventory.u.items_inventory[n].favorite;
 		p.look = sd->inventory_data[n]->look;
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p.enchantgrade = sd->inventory.u.items_inventory[n].enchantgrade;
+#endif
+#endif
+#endif
+#endif
 #endif
 	}
 
@@ -2846,6 +2849,10 @@ static void clif_item_equip( short idx, struct EQUIPITEM_INFO *p, struct item *i
 
 #if PACKETVER >= 20150226
 	p->option_count = clif_add_random_options( p->option_data, it );
+#endif
+
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+	p->enchantgrade = it->enchantgrade;
 #endif
 }
 
@@ -4491,6 +4498,11 @@ void clif_tradeadditem( struct map_session_data* sd, struct map_session_data* ts
 		clif_addcards( &p.slot, &sd->inventory.u.items_inventory[index] );
 #if PACKETVER >= 20150226
 		clif_add_random_options( p.option_data, &sd->inventory.u.items_inventory[index] );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p.location = pc_equippoint_sub( sd, sd->inventory_data[index] );
+		p.viewSprite = sd->inventory_data[index]->look;
+		p.enchantgrade = sd->inventory.u.items_inventory[index].enchantgrade;
+#endif
 #endif
 	}else{
 		p = {};
@@ -4633,6 +4645,9 @@ void clif_storageitemadded( struct map_session_data* sd, struct item* i, int ind
 	clif_addcards( &p.slot, i );
 #if PACKETVER >= 20150226
 	clif_add_random_options( p.option_data, i );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+	p.enchantgrade = i->enchantgrade;
+#endif
 #endif
 
 	clif_send( &p, sizeof( p ), &sd->bl, SELF );
@@ -7046,6 +7061,9 @@ void clif_cart_additem( struct map_session_data *sd, int n, int amount ){
 	clif_addcards( &p.slot, &sd->cart.u.items_cart[n] );
 #if PACKETVER >= 20150226
 	clif_add_random_options( p.option_data, &sd->cart.u.items_cart[n] );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+	p.enchantgrade = sd->cart.u.items_cart[n].enchantgrade;
+#endif
 #endif
 
 	clif_send( &p, sizeof( p ), &sd->bl, SELF );
@@ -7404,6 +7422,9 @@ void clif_vendinglist( struct map_session_data* sd, struct map_session_data* vsd
 #if PACKETVER >= 20160921
 		p->items[i].location = pc_equippoint_sub( sd, data );
 		p->items[i].viewSprite = data->look;
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p->items[i].enchantgrade = vsd->cart.u.items_cart[index].enchantgrade;
+#endif
 #endif
 #endif
 	}
@@ -7473,7 +7494,7 @@ void clif_openvending( struct map_session_data* sd, int id, struct s_vending* ve
 
 	struct PACKET_ZC_PC_PURCHASE_MYITEMLIST *p = (struct PACKET_ZC_PC_PURCHASE_MYITEMLIST *)WFIFOP( fd, 0 );
 
-	p->packetType = 0x136;
+	p->packetType = openvendingType;
 	p->packetLength = len;
 	p->AID = id;
 
@@ -7491,6 +7512,9 @@ void clif_openvending( struct map_session_data* sd, int id, struct s_vending* ve
 		clif_addcards( &p->items[i].slot, &sd->cart.u.items_cart[index] );
 #if PACKETVER >= 20150226
 		clif_add_random_options( p->items[i].option_data, &sd->cart.u.items_cart[index] );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p->items[i].enchantgrade = sd->cart.u.items_cart[index].enchantgrade;
+#endif
 #endif
 	}
 
@@ -9579,7 +9603,7 @@ void clif_refresh_storagewindow(struct map_session_data *sd) {
 	if( sd->state.storage_flag == 1 ) {
 		storage_sortitem(sd->storage.u.items_storage, ARRAYLENGTH(sd->storage.u.items_storage));
 		clif_storagelist(sd, sd->storage.u.items_storage, ARRAYLENGTH(sd->storage.u.items_storage), storage_getName(0));
-		clif_updatestorageamount(sd, sd->storage.amount, MAX_STORAGE);
+		clif_updatestorageamount(sd, sd->storage.amount, sd->storage.max_amount);
 	}
 	// Notify the client that the gstorage is open otherwise it will
 	// remain locked forever and nobody will be able to access it
@@ -9591,8 +9615,14 @@ void clif_refresh_storagewindow(struct map_session_data *sd) {
 		else {
 			storage_sortitem(gstor->u.items_guild, ARRAYLENGTH(gstor->u.items_guild));
 			clif_storagelist(sd, gstor->u.items_guild, ARRAYLENGTH(gstor->u.items_guild), "Guild Storage");
-			clif_updatestorageamount(sd, gstor->amount, MAX_GUILD_STORAGE);
+			clif_updatestorageamount(sd, gstor->amount, gstor->max_amount);
 		}
+	}
+	// Notify the client that the premium storage is open
+	if (sd->state.storage_flag == 3) {
+		storage_sortitem(sd->premiumStorage.u.items_storage, ARRAYLENGTH(sd->premiumStorage.u.items_storage));
+		clif_storagelist(sd, sd->premiumStorage.u.items_storage, ARRAYLENGTH(sd->premiumStorage.u.items_storage), storage_getName(sd->premiumStorage.stor_id));
+		clif_updatestorageamount(sd, sd->premiumStorage.amount, sd->premiumStorage.max_amount);
 	}
 }
 
@@ -12600,7 +12630,7 @@ void clif_parse_skill_toid( struct map_session_data* sd, uint16 skill_id, uint16
 	sd->skillitem = sd->skillitemlv = 0;
 
 	if( SKILL_CHK_GUILD(skill_id) ) {
-		if( sd->state.gmaster_flag )
+		if( sd->state.gmaster_flag || skill_id == GD_CHARGESHOUT_BEATING )
 			skill_lv = guild_checkskill(sd->guild, skill_id);
 		else
 			skill_lv = 0;
@@ -15383,6 +15413,9 @@ void clif_Mail_setattachment( struct map_session_data* sd, int index, int amount
 		}
 		p.favorite = item->favorite;
 		p.location = pc_equippoint( sd, server_index( index ) );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p.enchantgrade = item->enchantgrade;
+#endif
 	}
 
 	p.PacketType = rodexadditem;
@@ -15888,6 +15921,9 @@ void clif_Mail_read( struct map_session_data *sd, int mail_id ){
 				mailitem->bindOnEquip = item->bound ? 2 : data->flag.bindOnEquip ? 1 : 0;
 				clif_addcards( &mailitem->slot, item );
 				clif_add_random_options( mailitem->optionData, item );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+				mailitem->enchantgrade = item->enchantgrade;
+#endif
 
 				offset += sizeof( struct mail_item );
 				count++;
@@ -18231,6 +18267,9 @@ void clif_party_show_picker( struct map_session_data* sd, struct item* item_data
 	clif_addcards( &p.slot, item_data );
 	p.location = id->equip; // equip location
 	p.itemType = itemtype( id->nameid ); // item type
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+	p.enchantgrade = item_data->enchantgrade;
+#endif
 
 	clif_send( &p, sizeof( p ), &sd->bl, PARTY_SAMEMAP_WOS );
 #endif
@@ -18762,7 +18801,7 @@ void clif_search_store_info_ack( struct map_session_data* sd ){
 
 	struct PACKET_ZC_SEARCH_STORE_INFO_ACK *p = (struct PACKET_ZC_SEARCH_STORE_INFO_ACK *)WFIFOP( fd, 0 );
 
-	p->packetType = 0x836;
+	p->packetType = HEADER_ZC_SEARCH_STORE_INFO_ACK;
 	p->packetLength = len;
 	p->firstPage = !sd->searchstore.pages;
 	p->nextPage = searchstore_querynext( sd );
@@ -18791,6 +18830,9 @@ void clif_search_store_info_ack( struct map_session_data* sd ){
 		clif_addcards( &p->items[i].slot, &it );
 #if PACKETVER >= 20150226
 		clif_add_random_options( p->items[i].option_data, &it );
+#if PACKETVER_MAIN_NUM >= 20200916 || PACKETVER_RE_NUM >= 20200724
+		p->items[i].enchantgrade = ssitem->enchantgrade;
+#endif
 #endif
 	}
 
@@ -20877,7 +20919,7 @@ void clif_parse_sale_remove( int fd, struct map_session_data* sd ){
 
 /**
  * Sends all achievement data to the client (ZC_ALL_ACH_LIST).
- * 0a23 <packetType>.W <packetLength>.W <ACHCount>.L <ACHPoint>.L
+ * 0a23 <packetLength>.W <ACHCount>.L <ACHPoint>.L
  */
 void clif_achievement_list_all(struct map_session_data *sd)
 {
@@ -20919,7 +20961,7 @@ void clif_achievement_list_all(struct map_session_data *sd)
 
 /**
  * Sends a single achievement's data to the client (ZC_ACH_UPDATE).
- * 0a24 <packetType>.W <ACHPoint>.L
+ * 0a24 <ACHPoint>.L
  */
 void clif_achievement_update(struct map_session_data *sd, struct achievement *ach, int count)
 {
@@ -20953,7 +20995,7 @@ void clif_achievement_update(struct map_session_data *sd, struct achievement *ac
 
 /**
  * Checks if an achievement reward can be rewarded (CZ_REQ_ACH_REWARD).
- * 0a25 <packetType>.W <achievementID>.L
+ * 0a25 <achievementID>.L
  */
 void clif_parse_AchievementCheckReward(int fd, struct map_session_data *sd)
 {
@@ -20967,7 +21009,7 @@ void clif_parse_AchievementCheckReward(int fd, struct map_session_data *sd)
 
 /**
  * Returns the result of achievement_check_reward (ZC_REQ_ACH_REWARD_ACK).
- * 0a26 <packetType>.W <result>.W <achievementID>.L
+ * 0a26 <result>.W <achievementID>.L
  */
 void clif_achievement_reward_ack(int fd, unsigned char result, int achievement_id)
 {
@@ -21566,6 +21608,350 @@ TIMER_FUNC( clif_ping_timer ){
 
 	return 0;
 }
+
+/**
+ * Opens the refine UI on the designated client.
+ * 0aa0
+ */
+void clif_refineui_open( struct map_session_data* sd ){
+#if PACKETVER >= 20161012
+	int fd = sd->fd;
+
+	WFIFOHEAD(fd,packet_len(0x0AA0));
+	WFIFOW(fd,0) = 0x0AA0;
+	WFIFOSET(fd,packet_len(0x0AA0));
+
+	sd->state.refineui_open = true;
+#endif
+}
+
+/**
+ * Parses cancel/close of the refine UI on client side.
+ * 0aa4
+ */
+void clif_parse_refineui_close( int fd, struct map_session_data* sd ){
+#if PACKETVER >= 20161012
+	sd->state.refineui_open = false;
+#endif
+}
+
+#define REFINEUI_MAT_CNT 4
+
+/**
+ * Structure to store all required data about refine requirements
+ */
+struct refine_materials {
+	struct refine_cost cost;
+	uint8 chance;
+};
+
+/**
+ * Fills the given index with the requested data for that item and
+ * returns true on success or false on failure.
+ */
+static inline bool clif_refineui_materials_sub( struct item *item, struct item_data *id, struct refine_materials materials[REFINEUI_MAT_CNT], int index, enum refine_cost_type type ){
+	if( index < 0 || index > REFINEUI_MAT_CNT ){
+		return false;
+	}
+
+	// Get the material that is required to refine this item
+	materials[index].cost.nameid = status_get_refine_cost( id->wlv, type, REFINE_MATERIAL_ID );
+	// Get the amount of zeny that is required to refine the item with this material
+	materials[index].cost.zeny = status_get_refine_cost( id->wlv, type, REFINE_ZENY_COST );
+	// Get the breaking chance of the item with this material
+	materials[index].cost.breakable = status_get_refine_cost( id->wlv, type, REFINE_BREAKABLE );
+	// Get the chance for refining the item with this material
+	materials[index].chance = status_get_refine_chance( (enum refine_type)id->wlv, item->refine, type == REFINE_COST_ENRICHED );
+
+	// Either of the values was not set
+	if( materials[index].cost.nameid == 0 || materials[index].cost.zeny == 0 || materials[index].chance == 0 ){
+		// Reset all entries properly
+		materials[index].cost.nameid = materials[index].cost.zeny = materials[index].chance = 0;
+		materials[index].cost.breakable = true;
+		return false;
+	}else{
+		// Everything was set properly
+		return true;
+	}
+}
+
+/**
+ * Calculates all possible materials for the given item.
+ * Returns the count of materials that were filled in the materials array.
+ */
+static inline uint8 clif_refineui_materials( struct item *item, struct item_data *id, struct refine_materials materials[REFINEUI_MAT_CNT] ){
+	// Initialize the counter
+	uint8 count = 0;
+
+	// Zero the memory
+	memset( materials, 0, sizeof(struct refine_materials)*REFINEUI_MAT_CNT );
+
+	// Is the item +10 or above
+	if( item->refine >= 10 ){
+		// Normal refine requirements for +10 and above
+		if( clif_refineui_materials_sub( item, id, materials, count, REFINE_COST_OVER10 ) ){
+			count++;
+		}
+
+		// HD refine requirements for +10 and above
+		if( clif_refineui_materials_sub( item, id, materials, count, REFINE_COST_OVER10_HD ) ){
+			count++;
+		}
+	}else{
+		// Normal refine requirements
+		if( clif_refineui_materials_sub( item, id, materials, count, REFINE_COST_NORMAL ) ){
+			count++;
+		}
+		
+		// HD refine requirements
+		if( clif_refineui_materials_sub( item, id, materials, count, REFINE_COST_HD ) ){
+			count++;
+		}
+	}
+
+	// Enriched refine requirements
+	if( clif_refineui_materials_sub( item, id, materials, count, REFINE_COST_ENRICHED ) ){
+		count++;
+	}
+
+	// Return the amount of found materials
+	return count;
+}
+
+/**
+ * Adds the selected item into the refine UI and sends the possible materials
+ * to the client.
+ * 0aa2 <length>.W <index>.W <catalyst count>.B { <material>.W <chance>.B <price>.L }*
+ */
+void clif_refineui_info( struct map_session_data* sd, uint16 index ){
+	int fd = sd->fd;
+	struct item *item;
+	struct item_data *id;
+	struct refine_materials materials[REFINEUI_MAT_CNT];
+	uint8 material_count;
+
+	// Get the item db reference
+	id = sd->inventory_data[index];
+
+	// No item data was found
+	if( id == NULL ){
+		return;
+	}
+
+	// Check if the item can be refined
+	if( id->flag.no_refine ){
+		return;
+	}
+
+	// Only weapons and armors can be refined in the refine UI
+	if( id->type != IT_WEAPON && id->type != IT_ARMOR ){
+		return;
+	}
+
+	// Check the inventory
+	item = &sd->inventory.u.items_inventory[index];
+
+	// No item was found at the given index
+	if( item == NULL ){
+		return;
+	}
+
+	// Check if the item is identified
+	if( !item->identify ){
+		return;
+	}
+
+	// Check if the item is broken
+	if( item->attribute ){
+		return;
+	}
+
+	// Check the current refine level
+	if( item->refine < 0 || item->refine >= MAX_REFINE ){
+		return;
+	}
+
+	// Calculate the possible materials
+	material_count = clif_refineui_materials( item, id, materials );
+
+	// No possibilities were found
+	if( material_count == 0 ){
+		return;
+	}
+
+	uint16 length = sizeof( struct PACKET_ZC_REFINE_ADD_ITEM ) + material_count * sizeof( struct PACKET_ZC_REFINE_ADD_ITEM_SUB );
+
+	// Preallocate the size
+	WFIFOHEAD( fd, length );
+
+	struct PACKET_ZC_REFINE_ADD_ITEM* p = (struct PACKET_ZC_REFINE_ADD_ITEM*)WFIFOP( fd, 0 );
+
+	p->packetType = HEADER_ZC_REFINE_ADD_ITEM;
+	p->packtLength = length;
+	p->itemIndex = client_index( index );
+	p->blacksmithBlessing = 0; //TODO: required amount of "Blacksmith Blessing"(id: 6635)
+
+	for( uint8 i = 0; i < material_count; i++ ){
+		p->req[i].itemId = client_nameid( materials[i].cost.nameid );
+		p->req[i].chance = materials[i].chance;
+		p->req[i].zeny = materials[i].cost.zeny;
+	}
+
+	WFIFOSET( fd, p->packtLength );
+}
+
+/**
+ * Client request to add an item to the refine UI.
+ * 0aa1 <index>.W
+ */
+void clif_parse_refineui_add( int fd, struct map_session_data* sd ){
+#if PACKETVER >= 20161012
+	uint16 index = server_index( RFIFOW( fd, 2 ) );
+
+	// Check if the refine UI is open
+	if( !sd->state.refineui_open ){
+		return;
+	}
+
+	// Check if the index is valid
+	if( index >= MAX_INVENTORY ){
+		return;
+	}
+
+	// Send out the requirements for the refine process
+	clif_refineui_info( sd, index );
+#endif
+}
+
+/**
+ * Client requests to try to refine an item.
+ * 0aa3 <index>.W <material>.W <catalyst>.B
+ */
+void clif_parse_refineui_refine( int fd, struct map_session_data* sd ){
+#if PACKETVER >= 20161012
+	struct PACKET_CZ_REFINE_ITEM_REQUEST* p = (struct PACKET_CZ_REFINE_ITEM_REQUEST*)RFIFOP( fd, 0 );
+
+	uint16 index = server_index( p->index );
+	uint16 material = p->itemId;
+	bool use_blacksmith_blessing = p->blacksmithBlessing != 0; // TODO: add logic
+	struct refine_materials materials[REFINEUI_MAT_CNT];
+	uint8 i, material_count;
+	uint16 j;
+	struct item *item;
+	struct item_data *id;
+
+	// Check if the refine UI is open
+	if( !sd->state.refineui_open ){
+		return;
+	}
+
+	// Check if the index is valid
+	if( index >= MAX_INVENTORY ){
+		return;
+	}
+
+	// Get the item db reference
+	id = sd->inventory_data[index];
+
+	// No item data was found
+	if( id == NULL ){
+		return;
+	}
+
+	// Check if the item can be refined
+	if( id->flag.no_refine ){
+		return;
+	}
+
+	// Only weapons and armors can be refined in the refine UI
+	if( id->type != IT_WEAPON && id->type != IT_ARMOR ){
+		return;
+	}
+
+	// Check the inventory
+	item = &sd->inventory.u.items_inventory[index];
+
+	// No item was found at the given index
+	if( item == NULL ){
+		return;
+	}
+
+	// Check if the item is identified
+	if( !item->identify ){
+		return;
+	}
+
+	// Check if the item is broken
+	if( item->attribute ){
+		return;
+	}
+
+	// Check the current refine level
+	if( item->refine < 0 || item->refine >= MAX_REFINE ){
+		return;
+	}
+
+	// Check if the player has the selected material
+	if( ( j = pc_search_inventory( sd, material ) ) < 0 ){
+		return;
+	}
+
+	// Calculate the possible materials
+	material_count = clif_refineui_materials( item, id, materials );
+
+	// No possibilities were found
+	if( material_count == 0 ){
+		return;
+	}
+
+	// Find the selected material
+	ARR_FIND( 0, REFINEUI_MAT_CNT, i, materials[i].cost.nameid == material );
+
+	// The material was not in the list of possible materials
+	if( i >= REFINEUI_MAT_CNT || i < 0 ){
+		return;
+	}
+
+	// Try to pay for the refine
+	if( pc_payzeny( sd, materials[i].cost.zeny, LOG_TYPE_CONSUME, NULL ) ){
+		clif_npc_buy_result( sd, 1 ); // "You do not have enough zeny."
+		return;
+	}
+
+	// Delete the required material
+	if( pc_delitem( sd, j, 1, 0, 0, LOG_TYPE_CONSUME ) ){
+		return;
+	}
+
+	// Try to refine the item
+	if( materials[i].chance >= rnd() % 100 ){
+		// Success
+		item->refine = cap_value( item->refine + 1, 0, MAX_REFINE );
+		clif_misceffect( &sd->bl, 3 );
+		clif_refine( fd, 0, index, item->refine );
+		achievement_update_objective( sd, AG_REFINE_SUCCESS, 2, id->wlv, item->refine );
+		clif_refineui_info( sd, index );
+	}else{
+		// Failure
+
+		// Delete the item if it is breakable
+		if( materials[i].cost.breakable ){
+			clif_refine( fd, 1, index, item->refine );
+			pc_delitem( sd, index, 1, 0, 0, LOG_TYPE_CONSUME );
+		}else{
+			// Otherwise downgrade it
+			item->refine = cap_value( item->refine - 1, 0, MAX_REFINE );
+			clif_refine( fd, 2, index, item->refine );
+			clif_refineui_info(sd, index);
+		}
+		
+		clif_misceffect( &sd->bl, 2 );
+		achievement_update_objective( sd, AG_REFINE_FAIL, 1, 1 );
+	}
+#endif
+}
+
+#undef REFINEUI_MAT_CNT
 
 /*==========================================
  * Main client packet processing function

@@ -53,14 +53,22 @@ enum refine_cost_type {
 	REFINE_COST_MAX
 };
 
+// Refine information type
+enum refine_info_type {
+	REFINE_MATERIAL_ID = 0,
+	REFINE_ZENY_COST,
+	REFINE_BREAKABLE
+};
+
 struct refine_cost {
 	t_itemid nameid;
 	int zeny;
+	bool breakable;
 };
 
 /// Get refine chance
 int status_get_refine_chance(enum refine_type wlv, int refine, bool enriched);
-int status_get_refine_cost(int weapon_lv, int type, bool what);
+int status_get_refine_cost(int weapon_lv, int type, enum refine_info_type what);
 
 /// Weapon attack modification for size
 struct s_sizefix_db {
@@ -484,9 +492,9 @@ enum sc_type : int16 {
 	 **/
 	SC_REFLECTDAMAGE,
 	SC_FORCEOFVANGUARD,
-	SC_SHIELDSPELL_DEF,
-	SC_SHIELDSPELL_MDEF,
-	SC_SHIELDSPELL_REF,//380
+	SC_SHIELDSPELL_HP,
+	SC_SHIELDSPELL_SP,
+	SC_SHIELDSPELL_ATK,//380
 	SC_EXEEDBREAK,
 	SC_PRESTIGE,
 	SC_BANDING,
@@ -944,6 +952,9 @@ enum sc_type : int16 {
 	SC_POISON_MIST,
 	SC_STONE_WALL,
 	SC_CLOUD_POISON,
+	SC_HOMUN_TIME,
+
+	SC_EMERGENCY_MOVE,
 
 #ifdef RENEWAL
 	SC_EXTREMITYFIST2, //! NOTE: This SC should be right before SC_MAX, so it doesn't disturb if RENEWAL is disabled

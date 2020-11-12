@@ -513,6 +513,7 @@
 	export_parameter("StatusPoint",SP_STATUSPOINT);
 	export_parameter("BaseLevel",SP_BASELEVEL);
 	export_parameter("SkillPoint",SP_SKILLPOINT);
+	export_parameter("TraitPoint",SP_TRAITPOINT);
 	export_parameter("Class",SP_CLASS);
 	export_parameter("Upper",SP_UPPER);
 	export_parameter("Zeny",SP_ZENY);
@@ -530,6 +531,8 @@
 	export_parameter("MaxHp",SP_MAXHP);
 	export_parameter("Sp",SP_SP);
 	export_parameter("MaxSp",SP_MAXSP);
+	export_parameter("Ap",SP_AP);
+	export_parameter("MaxAp",SP_MAXAP);
 	export_parameter("BaseJob",SP_BASEJOB);
 	export_parameter("BaseClass",SP_BASECLASS);
 	export_parameter("killerrid",SP_KILLERRID);
@@ -557,6 +560,12 @@
 	export_constant2("bInt",SP_INT);
 	export_constant2("bDex",SP_DEX);
 	export_constant2("bLuk",SP_LUK);
+	export_constant2("bPow",SP_POW);
+	export_constant2("bSta",SP_STA);
+	export_constant2("bWis",SP_WIS);
+	export_constant2("bSpl",SP_SPL);
+	export_constant2("bCon",SP_CON);
+	export_constant2("bCrt",SP_CRT);
 	export_constant2("bAtk",SP_ATK1);
 	export_constant2("bAtk2",SP_ATK2);
 	export_constant2("bDef",SP_DEF1);
@@ -570,6 +579,13 @@
 	export_constant2("bAspd",SP_ASPD);
 	export_constant2("bFame",SP_FAME);
 	export_constant2("bUnbreakable",SP_UNBREAKABLE);
+
+	export_constant2("bPatk",SP_PATK);
+	export_constant2("bSmatk",SP_SMATK);
+	export_constant2("bHplus",SP_HPLUS);
+	export_constant2("bCrate",SP_CRATE);
+	export_constant2("bRes",SP_RES);
+	export_constant2("bMres",SP_MRES);
 
 	export_constant2("bAtkRange",SP_ATTACKRANGE);
 	export_constant2("bAtkEle",SP_ATKELE);
@@ -1237,9 +1253,9 @@
 	export_constant(SC_LEECHESEND);
 	export_constant(SC_REFLECTDAMAGE);
 	export_constant(SC_FORCEOFVANGUARD);
-	export_constant(SC_SHIELDSPELL_DEF);
-	export_constant(SC_SHIELDSPELL_MDEF);
-	export_constant(SC_SHIELDSPELL_REF);
+	export_constant(SC_SHIELDSPELL_HP);
+	export_constant(SC_SHIELDSPELL_SP);
+	export_constant(SC_SHIELDSPELL_ATK);
 	export_constant(SC_EXEEDBREAK);
 	export_constant(SC_PRESTIGE);
 	export_constant(SC_BANDING);
@@ -1606,10 +1622,12 @@
 	export_constant(SC_EP16_2_BUFF_SS);
 	export_constant(SC_EP16_2_BUFF_SC);
 	export_constant(SC_EP16_2_BUFF_AC);
+	export_constant(SC_EMERGENCY_MOVE);
 	export_constant(SC_OVERBRANDREADY);
 	export_constant(SC_POISON_MIST);
 	export_constant(SC_STONE_WALL);
 	export_constant(SC_CLOUD_POISON);
+	export_constant(SC_HOMUN_TIME);
 #ifdef RENEWAL
 	export_constant(SC_EXTREMITYFIST2);
 #endif
@@ -3776,6 +3794,7 @@
 	export_constant(AI_ZANZOU);
 	export_constant(AI_LEGION);
 	export_constant(AI_FAW);
+	export_constant(AI_GUILD);
 
 	/* battle flags */
 	export_constant(BF_NONE);
@@ -4569,10 +4588,6 @@
 	export_constant(MOBG_ClassChange);
 	export_constant(MOBG_Taekwon_Mission);
 
-	/* Item Random Option Group */
-	export_constant(RDMOPTG_None);
-	export_constant(RDMOPTG_Crimson_Weapon);
-
 	/* random option attributes */
 	export_constant(ROA_ID);
 	export_constant(ROA_VALUE);
@@ -5229,8 +5244,9 @@
 	export_constant(REFINE_COST_MAX);
 
 	/* refine information types */
-	script_set_constant("REFINE_MATERIAL_ID", 0, false, false);
-	script_set_constant("REFINE_ZENY_COST", 1, false, false);
+	export_constant(REFINE_MATERIAL_ID);
+	export_constant(REFINE_ZENY_COST);
+	export_constant(REFINE_BREAKABLE);
 
 	/* NPC view ids */
 	// Special macro to strip the prefix 'JT_'
