@@ -690,6 +690,7 @@ struct Battle_Config
 	int homunculus_starving_rate;
 	int homunculus_starving_delay;
 	int drop_connection_on_quit;
+	int feature_refineui;
 
 #include "../custom/battle_config_struct.inc"
 };

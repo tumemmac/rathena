@@ -24273,7 +24273,7 @@ BUILDIN_FUNC(getequiprefinecost) {
 			weapon_lv = REFINE_TYPE_SHADOW;
 	}
 
-	script_pushint(st, status_get_refine_cost(weapon_lv, type, info != 0));
+	script_pushint(st, status_get_refine_cost(weapon_lv, type, (enum refine_info_type)info));
 
 	return SCRIPT_CMD_SUCCESS;
 }
@@ -24892,6 +24892,30 @@ BUILDIN_FUNC(isnpccloaked)
 
 	script_pushint(st, npc_is_cloaked(nd, sd));
 	return SCRIPT_CMD_SUCCESS;
+}
+
+BUILDIN_FUNC(refineui){
+#if PACKETVER < 20161012
+	ShowError( "buildin_refineui: This command requires packet version 2016-10-12 or newer.\n" );
+	return SCRIPT_CMD_FAILURE;
+#else
+	struct map_session_data* sd;
+
+	if( !script_charid2sd(2,sd) ){
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if( !battle_config.feature_refineui ){
+		ShowError( "buildin_refineui: This command is disabled via configuration.\n" );
+		return SCRIPT_CMD_FAILURE;
+	}
+
+	if( !sd->state.refineui_open ){
+		clif_refineui_open(sd);
+	}
+
+	return SCRIPT_CMD_SUCCESS;
+#endif
 }
 
 #include "../custom/script.inc"
@@ -25555,8 +25579,10 @@ struct script_function buildin_func[] = {
 	BUILDIN_DEF(achievementexists,"i?"),
 	BUILDIN_DEF(achievementupdate,"iii?"),
 
-
+	// Refine UI
 	BUILDIN_DEF(getequiprefinecost,"iii?"),
+	BUILDIN_DEF(refineui,"?"),
+
 	BUILDIN_DEF2(round, "round", "ii"),
 	BUILDIN_DEF2(round, "ceil", "ii"),
 	BUILDIN_DEF2(round, "floor", "ii"),
