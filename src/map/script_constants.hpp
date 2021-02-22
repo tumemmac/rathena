@@ -1616,6 +1616,7 @@
 	export_constant(SC_STONE_WALL);
 	export_constant(SC_CLOUD_POISON);
 	export_constant(SC_HOMUN_TIME);
+	export_constant(SC_NPC_HALLUCINATIONWALK);
 #ifdef RENEWAL
 	export_constant(SC_EXTREMITYFIST2);
 #endif
