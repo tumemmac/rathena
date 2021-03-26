@@ -1175,6 +1175,17 @@ Opens the limited sale window.
 
 Displays/hides camera information from the client.
 If args are given, sets camera position.
+@synthesisui <id>
+
+Open Lapine Synthesis UI. Valid 'id' can be found in db/[pre-]re/item_synthesis.yml
+(available for PACKETVER >= 20160525)
+
+---------------------------------------
+
+@upgradeui <id>
+
+Open Lapine Upgrade UI. Valid 'id' can be found in db/[pre-]re/item_upgrade.yml
+(available for PACKETVER >= 20160525)
 
 ---------------------------------------
 
